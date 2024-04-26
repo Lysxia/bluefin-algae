@@ -4,6 +4,7 @@
   TypeOperators #-}
 module Main (main) where
 
+import Control.Monad (join)
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
@@ -50,6 +51,24 @@ testState = testGroup "State"
   [ testCase "simple" $ runPureEff (runState incr 0) @?= (0, 1) 
   , testCase "litmus-0" $ algaeStateLitmus @?= [0,0]
   , testCase "litmus-1" $ bluefinStateLitmus @?= [0,1]
+  ]
+
+-- * Nondeterminism
+
+coinFlip :: z :> zz => Handler NonDet.Choice z -> Eff zz Bool
+coinFlip choice =
+  join $ NonDet.choose choice -- flip coin
+    (NonDet.empty choice)     -- coin falls in gutter
+    (join $ NonDet.choose choice
+      (pure True)    -- heads
+      (pure False))  -- tails
+
+coinFlipList :: [Bool]
+coinFlipList = runPureEff (NonDet.toList coinFlip)
+
+testNonDet :: TestTree
+testNonDet = testGroup "NonDet"
+  [ testCase "coin-flip" $ coinFlipList @?= [True, False]
   ]
 
 main :: IO ()
