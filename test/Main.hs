@@ -1,4 +1,5 @@
 {-# LANGUAGE
+  BangPatterns,
   BlockArguments,
   ScopedTypeVariables,
   TypeOperators #-}
@@ -71,10 +72,32 @@ testNonDet = testGroup "NonDet"
   [ testCase "coin-flip" $ coinFlipList @?= [True, False]
   ]
 
+-- * Streaming
+
+cumulSum :: z :> zz => Handler (Coroutine Int Int) z -> Eff zz a
+cumulSum h = loop 0 where
+  loop !n = do
+    m <- yield h n
+    loop (m + n)
+
+feed :: Monad m => [i] -> Pipe o i m a -> m [o]
+feed xs0 (Pipe m) = m >>= loop xs0 where
+  loop _ (Done _) = pure []
+  loop xs (Yielding o k) = case xs of
+    [] -> pure [o]
+    i : ys -> (o :) <$> (k i >>= loop ys)
+
+testCoroutine :: TestTree
+testCoroutine = testGroup "Coroutine"
+  [ testCase "cumul-sum" $ runPureEff (feed [1,2,3] (evalCoroutine cumulSum)) @?= [0,1,3,6]
+  ]
+
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests"
   [ testState
+  , testNonDet
+  , testCoroutine
   ]
