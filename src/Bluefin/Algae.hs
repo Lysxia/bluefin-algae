@@ -12,9 +12,10 @@
 -- user-defined effects with a simple equational intuition.
 --
 -- Algebraic effect handlers are expressive enough to define various effects
--- from scratch. Otherwise, implementing 'runState' for example requires
--- mutable references (@IORef@), relying on @IO@'s built-in statefulness.
--- In terms of pure expressiveness, delimited continuations are all you need.
+-- from scratch. In comparison, the 'Bluefin.State.runState' handler from
+-- "Bluefin.State" requires mutable references (@IORef@), relying on @IO@'s
+-- built-in statefulness. In terms of pure expressiveness, delimited
+-- continuations are all you need.
 --
 -- An "algebraic effect" is a signature for a set of operations which we
 -- represent with a GADT. For example, the "state effect" @State s@ contains
@@ -69,6 +70,7 @@
 --
 -- === References
 --
+-- - <https://homepages.inf.ed.ac.uk/gdp/publications/handling-algebraic-effects.pdf Handling Algebraic Effects> (2013) by Gordon D. Plotkin and Matija Pretnar.
 -- - <https://www.microsoft.com/en-us/research/uploads/prod/2021/05/namedh-tr.pdf First-class names for effect handlers> (2021) by Ningning Xie, Youyou Cong, and Daan Leijen.
 module Bluefin.Algae
   ( AEffect
