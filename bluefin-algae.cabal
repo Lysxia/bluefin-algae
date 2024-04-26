@@ -46,4 +46,8 @@ test-suite bluefin-algae-test
     main-is:          Main.hs
     build-depends:
         base,
+        tasty,
+        tasty-hunit,
+        tasty-quickcheck,
+        bluefin,
         bluefin-algae
