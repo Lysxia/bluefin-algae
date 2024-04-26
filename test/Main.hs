@@ -6,17 +6,20 @@
 module Main (main) where
 
 import Control.Monad (join)
+import Data.Functor (void)
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
-import Bluefin.Eff (Eff, runPureEff, type (:>))
+import Bluefin.Eff (Eff, runPureEff, runEff, type (:>))
 import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
 import Bluefin.Algae.Error
-import qualified Bluefin.Algae.Error.Cancellable as ErrorC
+import qualified Bluefin.Algae.Error.Cancellable as EC
 import qualified Bluefin.Algae.NonDeterminism as NonDet
 import Bluefin.Algae.Coroutine
+import qualified Bluefin.Exception as E
+import qualified Bluefin.Exception.Dynamic as ED
 
 -- * State
 
@@ -32,7 +35,7 @@ incr state = do
 
 algaeStateLitmus :: [Int]
 algaeStateLitmus = runPureEff $ NonDet.toList \choice ->
-  fst <$> (`runState` 0) \state -> do
+  fst <$> runState 0 \state -> do
     _ <- NonDet.choose choice True False
     incr state
 
@@ -49,9 +52,33 @@ bluefinStateLitmus = runPureEff $ NonDet.toList \choice ->
 
 testState :: TestTree
 testState = testGroup "State"
-  [ testCase "simple" $ runPureEff (runState incr 0) @?= (0, 1) 
+  [ testCase "simple" $ runPureEff (runState 0 incr) @?= (0, 1)
   , testCase "litmus-0" $ algaeStateLitmus @?= [0,0]
   , testCase "litmus-1" $ bluefinStateLitmus @?= [0,1]
+  ]
+
+-- * Error
+
+errorLitmus :: IO Int
+errorLitmus = runEff \io -> snd <$> runState 0 \state ->
+  void (try \err ->
+    ED.onException (ED.ioeToDynExn io) (throw err ()) (void (incr state)))
+
+errorCancelLitmus :: IO Int
+errorCancelLitmus = runEff \io -> snd <$> runState 0 \state ->
+  void (EC.try (ED.ioeToDynExn io) \err ->
+    ED.onException (ED.ioeToDynExn io) (EC.throw err ()) (void (incr state)))
+
+exnLitmus :: IO Int
+exnLitmus = runEff \io -> snd <$> runState 0 \state ->
+  void (E.try \exn ->
+    ED.onException (ED.ioeToDynExn io) (E.throw exn ()) (void (incr state)))
+
+testError :: TestTree
+testError = testGroup "Error"
+  [ testCase "litmus-error" $ errorLitmus >>= \n -> n @?= 0
+  , testCase "litmus-errorC" $ errorCancelLitmus >>= \n -> n @?= 1
+  , testCase "litmus-exn" $ exnLitmus >>= \n -> n @?= 1
   ]
 
 -- * Nondeterminism
@@ -98,6 +125,7 @@ main = defaultMain tests
 tests :: TestTree
 tests = testGroup "Tests"
   [ testState
+  , testError
   , testNonDet
   , testCoroutine
   ]

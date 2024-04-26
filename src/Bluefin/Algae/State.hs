@@ -33,9 +33,10 @@ put :: z :> zz => Handler (State s) z -> s -> Eff zz ()
 put h s = call h (Put s)
 
 runState :: forall s a zz.
+  s ->
   (forall z. Handler (State s) z -> Eff (z :& zz) a) ->
-  s -> Eff zz (a, s)
-runState f s0 = unwrap s0 (handle stateHandler (wrap . f))
+  Eff zz (a, s)
+runState s0 f = unwrap s0 (handle stateHandler (wrap . f))
   where
     stateHandler :: HandlerBody (State s) zz (s -> Eff zz (a, s))
     stateHandler Get k = pure (\s -> k s >>= \k1 -> k1 s)
