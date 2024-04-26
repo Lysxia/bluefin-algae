@@ -24,6 +24,7 @@ library
       Bluefin.Algae.Cancellable
       Bluefin.DelCont
       Bluefin.Exception.Dynamic
+      Bluefin.Algae.Eff
       Bluefin.Algae.State
       Bluefin.Algae.Error
       Bluefin.Algae.Error.Cancellable
