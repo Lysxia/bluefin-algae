@@ -48,6 +48,5 @@ test-suite bluefin-algae-test
         base,
         tasty,
         tasty-hunit,
-        tasty-quickcheck,
         bluefin,
         bluefin-algae

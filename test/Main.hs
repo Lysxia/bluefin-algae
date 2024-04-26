@@ -1,6 +1,7 @@
 {-# LANGUAGE
   BangPatterns,
   BlockArguments,
+  RankNTypes,
   ScopedTypeVariables,
   TypeOperators #-}
 module Main (main) where
@@ -9,8 +10,7 @@ import Control.Monad (join)
 import Data.Functor (void)
 import Test.Tasty
 import Test.Tasty.HUnit
-import Test.Tasty.QuickCheck
-import Bluefin.Eff (Eff, runPureEff, runEff, type (:>))
+import Bluefin.Eff (Eff, runPureEff, runEff, type (:&), type (:>))
 import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
@@ -94,9 +94,15 @@ coinFlip choice =
 coinFlipList :: [Bool]
 coinFlipList = runPureEff (NonDet.toList coinFlip)
 
+toStream :: z :> zz =>
+  (forall z0. Handler NonDet.Choice z0 -> Eff (z0 :& zz) a) ->
+  Handler (Coroutine a ()) z -> Eff zz ()
+toStream f h = NonDet.forAllChoices f (yield h)
+
 testNonDet :: TestTree
 testNonDet = testGroup "NonDet"
   [ testCase "coin-flip" $ coinFlipList @?= [True, False]
+  , testCase "via-stream" $ runPureEff (consume [(), ()] (toStream coinFlip)) @?= [True, False]
   ]
 
 -- * Streaming
@@ -114,9 +120,26 @@ feed xs0 (Pipe m) = m >>= loop xs0 where
     [] -> pure [o]
     i : ys -> (o :) <$> (k i >>= loop ys)
 
+coyield :: (z :> zz, z' :> zz) =>
+  Handler (State ([i], [o])) z -> Handler (Error [o]) z' -> o -> Eff zz i
+coyield state err o = do
+  (is, os) <- get state
+  case is of
+    [] -> throw err (o : os)
+    i : ys -> put state (ys, o : os) >> pure i
+
+consume :: [i] -> (forall z0 zz0. Handler (Coroutine o i) z0 -> Eff (z0 :& zz0) a) -> Eff zz [o]
+consume is f = do
+  r <- try \err -> runState (is, []) \state ->
+    execCoroutine (coyield state err) f
+  pure $ reverse $ case r of
+    Left os -> os
+    Right (_, (_, os)) -> os
+
 testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"
   [ testCase "cumul-sum" $ runPureEff (feed [1,2,3] (evalCoroutine cumulSum)) @?= [0,1,3,6]
+  , testCase "consume-sum" $ runPureEff (consume [1,2,3] cumulSum) @?= [0,1,3,6]
   ]
 
 main :: IO ()
