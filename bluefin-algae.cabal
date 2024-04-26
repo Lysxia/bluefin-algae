@@ -13,6 +13,10 @@ copyright:          Li-yao Xia 2024
 category:           Control
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
+tested-with:
+  GHC == 9.6.4
+  GHC == 9.8.2
+  GHC == 9.10.1
 
 common warnings
     ghc-options: -Wall
