@@ -1,5 +1,6 @@
 {-# LANGUAGE
   BangPatterns,
+  DeriveAnyClass,
   GADTs,
   RankNTypes,
   ScopedTypeVariables,
@@ -61,10 +62,13 @@ module Bluefin.Algae.Cancellable
   , continue
   , discontinue
   , discontinueIO
+  , cancel
+  , CancelContinuation
   ) where
 
 import Control.Exception (Exception)
 import Data.Kind (Type)
+import Data.Functor (void)
 import Bluefin.Internal (Eff, Effects, type (:&), type (:>), IOE)
 import Bluefin.DelCont
 import Bluefin.Exception.Dynamic
@@ -118,3 +122,15 @@ discontinue ex k e = k (throw ex e)
 --   with a result of type @a@.
 discontinueIO :: (Exception e, io :> es0) => IOE io -> (Eff es0 b -> Eff es a) -> e -> Eff es a
 discontinueIO io = discontinue (ioeToDynExn io)
+
+-- | Exception thrown by 'cancel'.
+data CancelContinuation = CancelContinuation
+  deriving (Show, Exception)
+
+-- | 'discontinue' a continuation with the 'CancelContinuation' exception and catch it when it
+-- is re-thrown by the continuation.
+--
+-- This is intended for the specific case where the continuation re-throws unknown exceptions,
+-- assuming 'CancelContinuation' is indeed unknown to it.
+cancel :: (ex :> es0, ex :> es) => DynExn ex -> (Eff es0 b -> Eff es a) -> Eff es ()
+cancel ex k = catch ex (void (discontinue ex k CancelContinuation)) (\CancelContinuation -> pure ())
