@@ -1,0 +1,44 @@
+cabal-version:      3.4
+name:               bluefin-algae
+version:            0.1.0.0
+synopsis:
+  Algebraic effects and named handlers in Bluefin.
+description:
+  A framework for user-defined effects.
+license:            MIT
+license-file:       LICENSE
+author:             Li-yao Xia
+maintainer:         lysxia@gmail.com
+copyright:          Li-yao Xia 2024
+category:           Control
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:
+      Bluefin.Algae
+      Bluefin.Algae.Cancellable
+      Bluefin.DelCont
+      Bluefin.Exception.Dynamic
+    build-depends:
+      bluefin,
+      bluefin-internal,
+      base >=4.18
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+test-suite bluefin-algae-test
+    import:           warnings
+    default-language: Haskell2010
+    -- other-modules:
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        base,
+        bluefin-algae
