@@ -35,15 +35,15 @@ incr state = do
 
 algaeStateLitmus :: [Int]
 algaeStateLitmus = runPureEff $ NonDet.toList \choice ->
-  fst <$> runState 0 \state -> do
+  evalState 0 \state -> do
     _ <- NonDet.choose choice True False
-    incr state
+    incr state >> incr state
 
 bluefinStateLitmus :: [Int]
 bluefinStateLitmus = runPureEff $ NonDet.toList \choice ->
   B.evalState 0 \state -> do
     _ <- NonDet.choose choice True False
-    incr' state
+    incr' state >> incr' state
   where
     incr' state = do
       n <- B.get state
@@ -53,8 +53,8 @@ bluefinStateLitmus = runPureEff $ NonDet.toList \choice ->
 testState :: TestTree
 testState = testGroup "State"
   [ testCase "simple" $ runPureEff (runState 0 incr) @?= (0, 1)
-  , testCase "litmus-0" $ algaeStateLitmus @?= [0,0]
-  , testCase "litmus-1" $ bluefinStateLitmus @?= [0,1]
+  , testCase "litmus-0" $ algaeStateLitmus @?= [1,1]
+  , testCase "litmus-1" $ bluefinStateLitmus @?= [1,3]
   ]
 
 -- * Error
