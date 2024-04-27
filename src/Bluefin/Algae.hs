@@ -91,7 +91,7 @@ module Bluefin.Algae
 
 import Data.Kind (Type)
 import Bluefin.Eff (Eff, Effects, type (:&), type (:>))
-import Bluefin.DelCont
+import Bluefin.Algae.DelCont
 
 -- | Algebraic effect.
 type AEffect = Type -> Type

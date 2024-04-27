@@ -26,7 +26,7 @@ library
     exposed-modules:
       Bluefin.Algae
       Bluefin.Algae.DynExn
-      Bluefin.DelCont
+      Bluefin.Algae.DelCont
       Bluefin.Exception.Dynamic
       Bluefin.Algae.Eff
       Bluefin.Algae.State

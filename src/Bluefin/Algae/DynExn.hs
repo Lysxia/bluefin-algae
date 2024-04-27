@@ -26,7 +26,7 @@ import Control.Exception (Exception)
 import Data.Kind (Type)
 import Data.Functor (void)
 import Bluefin.Internal (Eff, Effects, type (:&), type (:>), IOE)
-import Bluefin.DelCont (PromptTag, Continuation, reset, shift0, resume, continue)
+import Bluefin.Algae.DelCont (PromptTag, Continuation, reset, shift0, resume, continue)
 import Bluefin.Exception.Dynamic
 import Bluefin.Algae (AEffect)
 

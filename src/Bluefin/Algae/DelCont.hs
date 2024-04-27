@@ -39,7 +39,7 @@
 --
 -- - <https://ghc-proposals.readthedocs.io/en/latest/proposals/0313-delimited-continuation-primops.html Delimited continuation primops> (GHC proposal, implemented in GHC 9.6.1).
 -- - <https://homes.luddy.indiana.edu/ccshan/recur/recur.pdf Shift to Control> (2004) by Chung-chieh Shan. The name 'shift0' follows the nomenclature in that paper.
-module Bluefin.DelCont
+module Bluefin.Algae.DelCont
   ( PromptTag
   , reset
   , shift0
@@ -50,32 +50,18 @@ module Bluefin.DelCont
   , cancel
   ) where
 
-import Control.Exception (Exception)
 import Data.Coerce (coerce)
 import Data.Functor (void)
 import Data.Kind (Type)
 import GHC.Exts (State#, RealWorld, PromptTag#, prompt#, control0#, newPromptTag#)
 import GHC.IO (IO(IO))
-import Bluefin.Internal (Eff(UnsafeMkEff), IOE)
+import Bluefin.Internal (Eff(UnsafeMkEff))
 import Bluefin.Eff
 import qualified Bluefin.Exception as E
-import Bluefin.Exception.Dynamic
 
 -- | Tag for a prompt of type @Eff ss a@ and scope @s@.
 type PromptTag :: Effects -> Type -> Effects -> Type
 data PromptTag ss a s = PromptTag (PromptTag# a)
-
-unsafeMkEff :: IO# a -> Eff ss a
-unsafeMkEff f = UnsafeMkEff (IO f)
-
-unsafeRunEff :: Eff ss a -> IO# a
-unsafeRunEff (UnsafeMkEff (IO f)) = f
-
-type IO# a = State# RealWorld -> (# State# RealWorld , a #)
-type Continuation# a b = IO# a -> IO# b
-
-unsafeContinuation# :: Continuation# b a -> Continuation t s b a
-unsafeContinuation# k = Continuation (unsafeMkEff . k . unsafeRunEff)
 
 -- | Run the enclosed computation under a prompt of type @Eff ss a@.
 --
@@ -184,3 +170,17 @@ shift0 :: forall s a b ss ss0.
 shift0 (PromptTag tag) f = unsafeMkEff (\z0 ->
   control0# tag (\k# ->
     unsafeRunEff (f (unsafeContinuation# (prompt# tag . k#)))) z0)
+
+-- * Internal
+
+type IO# a = State# RealWorld -> (# State# RealWorld , a #)
+type Continuation# a b = IO# a -> IO# b
+
+unsafeMkEff :: IO# a -> Eff ss a
+unsafeMkEff f = UnsafeMkEff (IO f)
+
+unsafeRunEff :: Eff ss a -> IO# a
+unsafeRunEff (UnsafeMkEff (IO f)) = f
+
+unsafeContinuation# :: Continuation# b a -> Continuation t s b a
+unsafeContinuation# k = Continuation (unsafeMkEff . k . unsafeRunEff)
