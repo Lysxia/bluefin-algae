@@ -12,10 +12,10 @@
 -- === Warning: Affine continuations
 --
 -- The error handlers in this module discard the continuation.
--- For single-shot continuations (must be used exactly once),
--- use "Bluefin.Algae.Error.Cancellable".
+-- For single-shot continuations, use "Bluefin.Algae.Error.Cancellable".
 module Bluefin.Algae.Error
   ( Error(..)
+  , catch
   , try
   , throw
   ) where
