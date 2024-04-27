@@ -25,25 +25,25 @@
 -- of arguments and results, with no intrinsic meaning.
 -- 
 -- @
--- data State s r where
---   Get :: State s s
---   Put :: s -> State s ()
+-- data 'Bluefin.Algae.State.State' s r where
+--   Get :: 'Bluefin.Algae.State.State' s s
+--   Put :: s -> 'Bluefin.Algae.State.State' s ()
 -- @
 --
 -- Below is an example of a stateful computation: a term of some type @'Eff' zz a@ with
--- a state handler @h :: 'Handler' (State s) z@ in scope (@z :> zz@).
+-- a state handler @h :: 'Handler' ('Bluefin.Algae.State.State' s) z@ in scope (@z :> zz@).
 -- The @State@ operations can be called using 'call' and the state handler @h@.
 --
 -- @
 -- -- Increment a counter and return its previous value.
--- incr :: z :> zz => Handler (State Int) z -> Eff zz Int
+-- incr :: z :> zz => 'Handler' ('Bluefin.Algae.State.State' Int) z -> 'Eff' zz Int
 -- incr h = do
 --     n <- get
 --     put (n + 1)
 --     pure n
 --   where
---     get = call h Get
---     put s = call h (Put s)
+--     get = 'call' h Get
+--     put s = 'call' h (Put s)
 -- @
 --
 -- We handle the state effect by giving an interpretation of the @Get@ and @Put@
@@ -54,9 +54,9 @@
 -- @f@ throughout a computation that calls @Get@ and @Put@:
 --
 -- @
--- handle f (\\h -> call h Get     >>= k h) = f Get     (handle f (\\h -> k h))
--- handle f (\\h -> call h (Put s) >>= k h) = f (Put s) (handle f (\\h -> k h))
--- handle f (\\h -> pure r) = pure r
+-- 'handle' f (\\h -> 'call' h Get     >>= k h) = f Get     ('handle' f (\\h -> k h))
+-- 'handle' f (\\h -> 'call' h (Put s) >>= k h) = f (Put s) ('handle' f (\\h -> k h))
+-- 'handle' f (\\h -> pure r) = pure r
 -- @
 --
 -- With those equations, @'handle' f@ applied to the above @incr@ simplifies to:
@@ -100,6 +100,7 @@ type AEffect = Type -> Type
 type HandlerBody :: AEffect -> Effects -> Type -> Type
 type HandlerBody f ss a = (forall x. f x -> (x -> Eff ss a) -> Eff ss a)
 
+-- | Generalization of 'HandlerBody' with cancellable continuations.
 type HandlerBody' :: AEffect -> Effects -> Type -> Type
 type HandlerBody' f ss a = (forall ss0 x. f x -> Continuation ss0 ss x a -> Eff ss a)
 
@@ -121,6 +122,7 @@ handle ::
   Eff ss a
 handle h = handle' (\f k -> h f (continue k))
 
+-- | Generalization of 'handle' with cancellable continuations.
 handle' ::
   HandlerBody' f ss a ->
   (forall s. Handler f s -> Eff (s :& ss) a) ->
@@ -136,7 +138,8 @@ call (Handler p h) op = shift0 p (\k -> h op k)
 -- such as 'Control.Exception.bracket' and other resource-management schemes à
 -- la @resourcet@.
 --
--- Cancellable continuations should be called exactly once (via 'continue' or 'discontinue'):
+-- Cancellable continuations should be called exactly once (via 'continue' or 'cancel'):
+--
 -- - at least once to ensure resources are eventually freed (no leaks);
 -- - at most once to avoid use-after-free errors.
 --
@@ -162,9 +165,9 @@ call (Handler p h) op = shift0 p (\k -> h op k)
 --
 -- ==== Solution
 --
--- Using 'handle'' instead lets us cancel the continuation with 'discontinue'.
+-- Using 'handle'' instead lets us 'cancel' the continuation.
 --
 -- @
--- 'handle'' (\\_e k -> cancel k >> pure Nothing)
+-- 'handle'' (\\_e k -> 'cancel' k >> pure Nothing)
 --   ('Bluefin.Exception.Dynamic.bracket' acquire release (\\_ -> 'call' h Fail))
 -- @

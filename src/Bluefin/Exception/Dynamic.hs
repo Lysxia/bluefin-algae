@@ -30,9 +30,11 @@ data DynExn (ex :: Effects) = DynExn
 ioeToDynExn :: IOE io -> DynExn io
 ioeToDynExn _ = DynExn
 
+-- | Throw an exception.
 throw :: (E.Exception e, ex :> es) => DynExn ex -> e -> Eff es a
 throw _ e = B.UnsafeMkEff (E.throwIO e)
 
+-- | Catch an exception.
 catch :: (E.Exception e, ex :> es) => DynExn ex -> Eff es a -> (e -> Eff es a) -> Eff es a
 catch _ m h = B.UnsafeMkEff (E.catch (B.unsafeUnEff m) (B.unsafeUnEff . h))
 
