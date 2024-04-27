@@ -64,10 +64,15 @@ errorLitmus = runEff \io -> snd <$> runState 0 \state ->
   void (try \err ->
     ED.onException (ED.ioeToDynExn io) (throw err ()) (void (incr state)))
 
-errorCancelLitmus :: IO Int
-errorCancelLitmus = runEff \io -> snd <$> runState 0 \state ->
+errorDynLitmus :: IO Int
+errorDynLitmus = runEff \io -> snd <$> runState 0 \state ->
   void (EC.try (ED.ioeToDynExn io) \err ->
     ED.onException (ED.ioeToDynExn io) (EC.throw err ()) (void (incr state)))
+
+errorNoCancelLitmus :: IO Int
+errorNoCancelLitmus = runEff \io -> snd <$> runState 0 \state ->
+  void (try' \err ->
+    ED.onException (ED.ioeToDynExn io) (throw err ()) (void (incr state)))
 
 exnLitmus :: IO Int
 exnLitmus = runEff \io -> snd <$> runState 0 \state ->
@@ -76,8 +81,9 @@ exnLitmus = runEff \io -> snd <$> runState 0 \state ->
 
 testError :: TestTree
 testError = testGroup "Error"
-  [ testCase "litmus-error" $ errorLitmus >>= \n -> n @?= 0
-  , testCase "litmus-errorC" $ errorCancelLitmus >>= \n -> n @?= 1
+  [ testCase "litmus-error" $ errorLitmus >>= \n -> n @?= 1
+  , testCase "litmus-error-dyn" $ errorDynLitmus >>= \n -> n @?= 1
+  , testCase "litmus-error-no-cancel" $ errorNoCancelLitmus >>= \n -> n @?= 0
   , testCase "litmus-exn" $ exnLitmus >>= \n -> n @?= 1
   ]
 
