@@ -18,6 +18,7 @@ module Bluefin.Algae.Coroutine
   , evalCoroutine
   , Pipe(..)
   , PipeEvent(..)
+  , execPipe
   ) where
 
 import Bluefin.Eff
@@ -43,6 +44,8 @@ execCoroutine h f = handle coroutineHandler f
     coroutineHandler (Yield o) k = h o >>= k
 
 -- | Evaluate a coroutine into a tree.
+--
+-- Note: @'execCoroutine' h = 'execPipe' h . 'evalCoroutine'@
 evalCoroutine :: forall o i a zz.
   (forall z. Handler (Coroutine o i) z -> Eff (z :& zz) a) ->
   Pipe o i (Eff zz) a
@@ -61,3 +64,10 @@ newtype Pipe o i m a = Pipe (m (PipeEvent o i m a))
 data PipeEvent o i m a
   = Done a
   | Yielding o (i -> m (PipeEvent o i m a))
+
+-- | Run a 'Pipe' computation with a function to respond to every 'Yielding' event.
+execPipe :: Monad m => (o -> m i) -> Pipe o i m a -> m a
+execPipe h (Pipe m) = m >>= loop
+  where
+    loop (Done a) = pure a
+    loop (Yielding o k) = h o >>= \i -> k i >>= loop
