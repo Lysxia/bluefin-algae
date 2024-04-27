@@ -6,20 +6,21 @@
   StandaloneKindSignatures,
   TypeOperators #-}
 
--- | = Errors with cancellable continuations
+-- | = Errors as an algebraic effect
 --
--- Cancellable variant of "Bluefin.Algae.Error".
+-- Variant of "Bluefin.Algae.Error" that uses dynamic exceptions to cancel
+-- continuations.
 --
 -- The error handlers in this module use the continuation exactly once,
 -- cancelling the continuation ('cancel') to trigger its exception handlers.
-module Bluefin.Algae.Error.Cancellable
+module Bluefin.Algae.Error.DynExn
   ( Error(..)
   , try
   , throw
   ) where
 
 import Bluefin.Eff (Eff, type (:&), type (:>))
-import Bluefin.Algae.Cancellable
+import Bluefin.Algae.DynExn
 import Bluefin.Algae.Error (Error(..))
 import Bluefin.Exception.Dynamic (DynExn)
 

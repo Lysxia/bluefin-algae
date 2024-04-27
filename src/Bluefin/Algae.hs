@@ -74,10 +74,19 @@
 -- - <https://www.microsoft.com/en-us/research/uploads/prod/2021/05/namedh-tr.pdf First-class names for effect handlers> (2021) by Ningning Xie, Youyou Cong, and Daan Leijen.
 module Bluefin.Algae
   ( AEffect
+
+    -- * Simple interface
   , HandlerBody
   , Handler
   , handle
   , call
+
+    -- * Cancellable continuations
+    -- $cancel
+  , HandlerBody'
+  , handle'
+  , continue
+  , cancel
   ) where
 
 import Data.Kind (Type)
@@ -91,10 +100,13 @@ type AEffect = Type -> Type
 type HandlerBody :: AEffect -> Effects -> Type -> Type
 type HandlerBody f ss a = (forall x. f x -> (x -> Eff ss a) -> Eff ss a)
 
+type HandlerBody' :: AEffect -> Effects -> Type -> Type
+type HandlerBody' f ss a = (forall ss0 x. f x -> Continuation ss0 ss x a -> Eff ss a)
+
 -- | Handler to call operations of the effect @f@.
 type Handler :: AEffect -> Effects -> Type
 data Handler f s where
-  Handler :: !(PromptTag ss a s) -> HandlerBody f ss a -> Handler f s
+  Handler :: !(PromptTag ss a s) -> HandlerBody' f ss a -> Handler f s
 
 -- | Handle operations of @f@.
 --
@@ -102,13 +114,57 @@ data Handler f s where
 --
 -- If the handler might not call the continuation (like for an exception effect), and
 -- if the handled computation manages resources (e.g., opening files, transactions)
--- prefer 'Bluefin.Algae.Cancellable.handle' from "Bluefin.Algae.Cancellable" to trigger resource clean up with cancellable continuations.
+-- prefer 'handle'' to trigger resource clean up with cancellable continuations.
 handle ::
   HandlerBody f ss a ->
   (forall s. Handler f s -> Eff (s :& ss) a) ->
   Eff ss a
-handle h act = reset (\p -> act (Handler p h))
+handle h = handle' (\f k -> h f (continue k))
+
+handle' ::
+  HandlerBody' f ss a ->
+  (forall s. Handler f s -> Eff (s :& ss) a) ->
+  Eff ss a
+handle' h act = reset (\p -> act (Handler p h))
 
 -- | Call an operation of @f@.
 call :: s :> ss => Handler f s -> f a -> Eff ss a
-call (Handler p h) op = shift0 p (\k -> h op (k . pure))
+call (Handler p h) op = shift0 p (\k -> h op k)
+
+-- $cancel
+-- Cancellable continuations are useful to work with native exception handlers
+-- such as 'Control.Exception.bracket' and other resource-management schemes à
+-- la @resourcet@.
+--
+-- Cancellable continuations should be called exactly once (via 'continue' or 'discontinue'):
+-- - at least once to ensure resources are eventually freed (no leaks);
+-- - at most once to avoid use-after-free errors.
+--
+-- Enforcing this requirement with linear types would be a welcome contribution.
+--
+-- === Example
+--
+-- ==== Problem
+--
+-- Given 'Bluefin.Exception.Dynamic.bracket' and a @Fail@ effect,
+-- the simple 'Bluefin.Algae.handle' may cause resource leaks:
+--
+-- @
+-- 'Bluefin.Algae.handle' (\\_e _k -> pure Nothing)
+--   ('Bluefin.Exception.Dynamic.bracket' ex acquire release (\\_ -> 'call' h Fail))
+-- @
+--
+-- @bracket@ is intended to ensure that the acquired resource is released even if the bracketed
+-- function throws an exception. However, when the @Fail@ operation is called, the handler
+-- @(\\_e _k -> pure Nothing)@ discards the continuation @_k@ which contains the
+-- exception handler installed by @bracket@.
+-- The resource leaks because @release@ will never be called.
+--
+-- ==== Solution
+--
+-- Using 'handle'' instead lets us cancel the continuation with 'discontinue'.
+--
+-- @
+-- 'handle'' (\\_e k -> cancel k >> pure Nothing)
+--   ('Bluefin.Exception.Dynamic.bracket' acquire release (\\_ -> 'call' h Fail))
+-- @

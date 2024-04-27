@@ -25,13 +25,13 @@ library
     import:           warnings
     exposed-modules:
       Bluefin.Algae
-      Bluefin.Algae.Cancellable
+      Bluefin.Algae.DynExn
       Bluefin.DelCont
       Bluefin.Exception.Dynamic
       Bluefin.Algae.Eff
       Bluefin.Algae.State
       Bluefin.Algae.Error
-      Bluefin.Algae.Error.Cancellable
+      Bluefin.Algae.Error.DynExn
       Bluefin.Algae.NonDeterminism
       Bluefin.Algae.Coroutine
     build-depends:

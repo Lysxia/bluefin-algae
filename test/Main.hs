@@ -15,7 +15,7 @@ import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
 import Bluefin.Algae.Error
-import qualified Bluefin.Algae.Error.Cancellable as EC
+import qualified Bluefin.Algae.Error.DynExn as EC
 import qualified Bluefin.Algae.NonDeterminism as NonDet
 import Bluefin.Algae.Coroutine
 import qualified Bluefin.Exception as E

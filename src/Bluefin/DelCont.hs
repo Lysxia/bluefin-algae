@@ -43,23 +43,39 @@ module Bluefin.DelCont
   ( PromptTag
   , reset
   , shift0
+  , Continuation
+  , weakenC1
+  , resume
+  , continue
+  , cancel
   ) where
 
+import Control.Exception (Exception)
+import Data.Coerce (coerce)
+import Data.Functor (void)
 import Data.Kind (Type)
 import GHC.Exts (State#, RealWorld, PromptTag#, prompt#, control0#, newPromptTag#)
 import GHC.IO (IO(IO))
-import Bluefin.Internal (Eff(UnsafeMkEff))
+import Bluefin.Internal (Eff(UnsafeMkEff), IOE)
 import Bluefin.Eff
+import qualified Bluefin.Exception as E
+import Bluefin.Exception.Dynamic
 
 -- | Tag for a prompt of type @Eff ss a@ and scope @s@.
 type PromptTag :: Effects -> Type -> Effects -> Type
 data PromptTag ss a s = PromptTag (PromptTag# a)
 
-unsafeMkEff :: (State# RealWorld -> (# State# RealWorld , a #)) -> Eff ss a
+unsafeMkEff :: IO# a -> Eff ss a
 unsafeMkEff f = UnsafeMkEff (IO f)
 
-unsafeRunEff :: Eff ss a -> State# RealWorld -> (# State# RealWorld , a #)
+unsafeRunEff :: Eff ss a -> IO# a
 unsafeRunEff (UnsafeMkEff (IO f)) = f
+
+type IO# a = State# RealWorld -> (# State# RealWorld , a #)
+type Continuation# a b = IO# a -> IO# b
+
+unsafeContinuation# :: Continuation# b a -> Continuation t s b a
+unsafeContinuation# k = Continuation (unsafeMkEff . k . unsafeRunEff)
 
 -- | Run the enclosed computation under a prompt of type @Eff ss a@.
 --
@@ -85,6 +101,66 @@ reset :: forall a ss.
 reset f = unsafeMkEff (\z0 -> case newPromptTag# z0 of
     (# z1, tag #) -> prompt# tag (unsafeRunEff (f (PromptTag tag))) z1)
 
+-- | Continuations are slices of the call stack, or evaluation context.
+--
+-- The 'Continuation' type is abstract since not all functions @'Eff' t b -> 'Eff' s a@
+-- represent evaluation contexts. In particular, 'weakenC1' is not definable for arbitrary
+-- such functions.
+--
+-- For example, in
+--
+-- @
+-- reset \\tag0 ->
+--   reset \\tag1 ->
+--     reset \\tag2 ->
+--       shift0 tag1 f >>= etc
+-- @
+--
+-- 'shift0' captures a continuation, the slice represented by the following
+-- function:
+--
+-- @
+-- Continuation \\hole ->
+--   reset \\tag1 ->
+--     reset \\tag2 ->
+--       hole >>= etc
+-- @
+--
+-- That continuation has type @'Continuation' t s b a@ where @Eff t b@ is the type of the hole,
+-- and @Eff s a@ is the type of the result once the hole is plugged.
+--
+-- The second argument of 'shift0', @f@, is applied to the continuation:
+--
+-- @
+-- reset \\tag0 ->
+--  f (Continuation \\hole ->
+--   reset \\tag1 ->
+--     reset \\tag2 ->
+--       hole >>= etc)
+-- @
+newtype Continuation t s b a = Continuation (Eff t b -> Eff s a)
+
+-- | Extend the context of a continuation.
+weakenC1 :: Continuation t s b a -> Continuation (e :& t) (e :& s) b a
+weakenC1 = coerce
+
+-- | Resume a continuation with a computation under it.
+resume :: Continuation t s b a -> Eff t b -> Eff s a
+resume (Continuation k) = k
+
+-- | Resume a cancellable continuation with a result.
+--
+-- In other words, this converts a cancellable continuation to a simple continuation.
+continue :: Continuation t s b a -> b -> Eff s a
+continue k = resume k . pure
+
+-- | Cancel a continuation: resume by throwing a scoped exception and catch it.
+--
+-- The continuation SHOULD re-throw unknown exceptions.
+-- (That is guaranteed if you don't use "Exception.Dynamic".)
+cancel :: Continuation t s b a -> Eff s ()
+cancel k = E.catch (\ex -> void (resume (weakenC1 k) (E.throw ex ()))) (\_ -> pure ())
+
 -- | Capture the continuation up to the tagged prompt.
 --
 -- @
@@ -103,8 +179,8 @@ reset f = unsafeMkEff (\z0 -> case newPromptTag# z0 of
 shift0 :: forall s a b ss ss0.
   s :> ss0 =>
   PromptTag ss a s ->
-  ((Eff ss0 b -> Eff ss a) -> Eff ss a) ->
+  (Continuation ss0 ss b a -> Eff ss a) ->
   Eff ss0 b
 shift0 (PromptTag tag) f = unsafeMkEff (\z0 ->
   control0# tag (\k# ->
-    unsafeRunEff (f (unsafeMkEff . prompt# tag . k# . unsafeRunEff))) z0)
+    unsafeRunEff (f (unsafeContinuation# (prompt# tag . k#)))) z0)
