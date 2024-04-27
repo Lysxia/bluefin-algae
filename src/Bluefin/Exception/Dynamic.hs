@@ -20,7 +20,7 @@ module Bluefin.Exception.Dynamic
 
 import qualified Control.Exception as E
 import qualified Bluefin.Internal as B
-import Bluefin.Eff
+import Bluefin.Eff (Eff, Effects, type (:>))
 import Bluefin.IO (IOE)
 
 -- | Capability to catch and throw dynamic exceptions.

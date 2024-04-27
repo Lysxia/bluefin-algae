@@ -8,9 +8,9 @@ module Main (main) where
 
 import Control.Monad (join)
 import Data.Functor (void)
-import Test.Tasty
+import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
-import Bluefin.Eff (Eff, runPureEff, runEff, type (:&), type (:>))
+import Bluefin.Eff (Eff, runPureEff, runEff, bracket, type (:&), type (:>))
 import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
@@ -59,32 +59,35 @@ testState = testGroup "State"
 
 -- * Error
 
-errorLitmus :: IO Int
-errorLitmus = runEff \io -> snd <$> runState 0 \state ->
+onException :: Eff es a -> Eff es () -> Eff es a
+onException run post = bracket (pure ()) (\_ -> post) (\_ -> run)
+
+errorLitmus :: Int
+errorLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (try \err ->
-    ED.onException (ED.ioeToDynExn io) (throw err ()) (void (incr state)))
+    onException (throw err ()) (void (incr state)))
 
 errorDynLitmus :: IO Int
 errorDynLitmus = runEff \io -> snd <$> runState 0 \state ->
   void (EC.try (ED.ioeToDynExn io) \err ->
-    ED.onException (ED.ioeToDynExn io) (EC.throw err ()) (void (incr state)))
+    onException (EC.throw err ()) (void (incr state)))
 
-errorNoCancelLitmus :: IO Int
-errorNoCancelLitmus = runEff \io -> snd <$> runState 0 \state ->
+errorNoCancelLitmus :: Int
+errorNoCancelLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (try' \err ->
-    ED.onException (ED.ioeToDynExn io) (throw err ()) (void (incr state)))
+    onException (throw err ()) (void (incr state)))
 
-exnLitmus :: IO Int
-exnLitmus = runEff \io -> snd <$> runState 0 \state ->
+exnLitmus :: Int
+exnLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (E.try \exn ->
-    ED.onException (ED.ioeToDynExn io) (E.throw exn ()) (void (incr state)))
+    onException (E.throw exn ()) (void (incr state)))
 
 testError :: TestTree
 testError = testGroup "Error"
-  [ testCase "litmus-error" $ errorLitmus >>= \n -> n @?= 1
+  [ testCase "litmus-error" $ errorLitmus @?= 1
   , testCase "litmus-error-dyn" $ errorDynLitmus >>= \n -> n @?= 1
-  , testCase "litmus-error-no-cancel" $ errorNoCancelLitmus >>= \n -> n @?= 0
-  , testCase "litmus-exn" $ exnLitmus >>= \n -> n @?= 1
+  , testCase "litmus-error-no-cancel" $ errorNoCancelLitmus @?= 0
+  , testCase "litmus-exn" $ exnLitmus @?= 1
   ]
 
 -- * Nondeterminism
