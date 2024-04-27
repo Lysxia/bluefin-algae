@@ -8,12 +8,12 @@
   TypeOperators #-}
 
 -- | = Coroutines: yield as an algebraic effect
---
--- The handlers in this module call each continuation exactly once.
--- They are compatible with single-shot continuations.
 module Bluefin.Algae.Coroutine
-  ( Coroutine(..)
+  ( -- * Operations
+    Coroutine(..)
   , yield
+
+    -- * Handlers
   , execCoroutine
   , evalCoroutine
   , Pipe(..)
@@ -25,9 +25,10 @@ import Bluefin.Algae
 
 -- | Coroutine effect with outputs @o@ and inputs @i@.
 data Coroutine o i a where
+  -- | Yield an output and wait for an input.
   Yield :: o -> Coroutine o i i
 
--- | Wrapper around 'Yield'.
+-- | Call the 'Yield' operation.
 yield :: z :> zz => Handler (Coroutine o i) z -> o -> Eff zz i
 yield h o = call h (Yield o)
 
@@ -56,6 +57,7 @@ evalCoroutine f = Pipe (handle coroutineHandler (wrap . f))
 -- | A tree of 'Yielding' events interleaved with @m@ computations.
 newtype Pipe o i m a = Pipe (m (PipeEvent o i m a))
 
+-- | Events of 'Pipe'.
 data PipeEvent o i m a
   = Done a
   | Yielding o (i -> m (PipeEvent o i m a))
