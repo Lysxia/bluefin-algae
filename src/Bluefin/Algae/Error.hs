@@ -12,13 +12,13 @@
 -- These scoped errors are similar to "Bluefin.Exception".
 --
 -- Algebraic operations in Bluefin are truly scoped:
--- they cannot be intercepted by exception handlers, notably 'Bluefin.Exception.bracket'.
+-- they cannot be intercepted by exception handlers, notably 'Bluefin.Eff.bracket'.
 --
 -- 'catch' and 'try' make an explicit call to 'cancel' to trigger exception handlers.
 -- This makes them equivalent to "Bluefin.Exception".
 --
 -- The simpler variants 'catch'' and 'try'' don't use 'cancel', so they are
--- faster when there is no 'Bluefin.Exception.bracket' to worry about.
+-- faster when there is no 'Bluefin.Eff.bracket' to worry about.
 module Bluefin.Algae.Error
   ( -- * Operations
     Error(..)
@@ -55,10 +55,10 @@ throw h e = call h (Throw e)
 --
 -- 'catch'' discards the continuation, which may be problematic
 -- if there are resources to be freed by the continuation (typically
--- if 'throw' was called in the middle of a 'Bluefin.Exception.bracket').
+-- if 'throw' was called in the middle of a 'Bluefin.Eff.bracket').
 -- Use 'catch' to free those resources instead.
 --
--- Without anything like 'Bluefin.Exception.bracket', 'catch'' does less work.
+-- Without anything like 'Bluefin.Eff.bracket', 'catch'' does less work.
 -- 'catch' makes 'throw' traverse the stack twice (first to find the prompt,
 -- then to 'cancel' the continuation).
 -- 'catch'' makes 'throw' traverse the stack only once.

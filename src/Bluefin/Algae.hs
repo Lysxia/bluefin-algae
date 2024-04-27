@@ -134,9 +134,8 @@ call :: s :> ss => Handler f s -> f a -> Eff ss a
 call (Handler p h) op = shift0 p (\k -> h op k)
 
 -- $cancel
--- Cancellable continuations are useful to work with native exception handlers
--- such as 'Control.Exception.bracket' and other resource-management schemes à
--- la @resourcet@.
+-- Cancellable continuations are useful to work with resource-management schemes
+-- with exception handlers such as 'Bluefin.Eff.bracket'
 --
 -- Cancellable continuations should be called exactly once (via 'continue' or 'cancel'):
 --
@@ -149,18 +148,19 @@ call (Handler p h) op = shift0 p (\k -> h op k)
 --
 -- ==== Problem
 --
--- Given 'Bluefin.Exception.Dynamic.bracket' and a @Fail@ effect,
+-- Given 'Bluefin.Eff.bracket' and a @Fail@ effect,
 -- the simple 'Bluefin.Algae.handle' may cause resource leaks:
 --
 -- @
 -- 'Bluefin.Algae.handle' (\\_e _k -> pure Nothing)
---   ('Bluefin.Exception.Dynamic.bracket' ex acquire release (\\_ -> 'call' h Fail))
+--   ('Bluefin.Eff.bracket' ex acquire release (\\_ -> 'call' h Fail))
 -- @
 --
--- @bracket@ is intended to ensure that the acquired resource is released even if the bracketed
--- function throws an exception. However, when the @Fail@ operation is called, the handler
--- @(\\_e _k -> pure Nothing)@ discards the continuation @_k@ which contains the
--- exception handler installed by @bracket@.
+-- 'Bluefin.Eff.bracket' is intended to ensure that the acquired resource is
+-- released even if the bracketed function throws an exception. However, when
+-- the @Fail@ operation is called, the handler @(\\_e _k -> pure Nothing)@
+-- discards the continuation @_k@ which contains the exception handler
+-- installed by 'Bluefin.Eff.bracket'.
 -- The resource leaks because @release@ will never be called.
 --
 -- ==== Solution
@@ -169,5 +169,5 @@ call (Handler p h) op = shift0 p (\k -> h op k)
 --
 -- @
 -- 'handle'' (\\_e k -> 'cancel' k >> pure Nothing)
---   ('Bluefin.Exception.Dynamic.bracket' acquire release (\\_ -> 'call' h Fail))
+--   ('Bluefin.Eff.bracket' acquire release (\\_ -> 'call' h Fail))
 -- @
