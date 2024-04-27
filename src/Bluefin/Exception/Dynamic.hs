@@ -6,6 +6,19 @@
 --
 -- This is the vanilla exception mechanism from @IO@.
 -- Use this module to handle exceptions from external (non-bluefin) APIs.
+--
+-- Another motivation is to serve as a principled (experimental) framework
+-- for resource management with 'bracket'.
+--
+-- The core Bluefin API exposes a 'Bluefin.Eff.bracket' in "Bluefin.Eff"
+-- which (intentionally) weakens the scoping of scoped exceptions in
+-- "Bluefin.Exception".
+--
+-- This module is an experiment for a world where
+--
+-- - scoped exceptions are truly scoped (unlike "Bluefin.Exception");
+-- - the capability to catch and throw dynamic exceptions is explicit
+--   (unlike 'Bluefin.Eff.bracket' in "Bluefin.Eff").
 module Bluefin.Exception.Dynamic
   ( DynExn
   , ioeToDynExn
