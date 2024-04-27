@@ -55,7 +55,7 @@ handle _ h act = reset (\p -> act (Handler p h))
 call :: (ex :> es, s :> es) => Handler ex f s -> f a -> Eff es a
 call (Handler p h) op = shift0 p (\k -> h op k)
 
--- | Resume by throwing a (dynamic) exception.
+-- | Resume by throwing a dynamic exception.
 --
 -- Note that different outcomes are possible depending on your handled computation.
 -- Be sure to handle them appropriately.
