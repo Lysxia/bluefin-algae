@@ -20,6 +20,7 @@ module Bluefin.Algae.DynExn
   , discontinue
   , discontinueIO
   , cancel
+  , CancelContinuation(..)
   ) where
 
 import Control.Exception (Exception)
@@ -38,7 +39,7 @@ type HandlerBody ex f ss a = (forall x ss0. ex :> ss0 => f x -> Continuation ss0
 -- | Handler to call operations of the effect @f@ with cancellable continuations.
 type Handler :: Effects -> AEffect -> Effects -> Type
 data Handler ex f s where
-  Handler :: !(PromptTag ss a s) -> HandlerBody ex f ss a -> Handler ex f s
+  MkHandler :: !(PromptTag ss a s) -> HandlerBody ex f ss a -> Handler ex f s
 
 -- | Handle operations of @f@ with cancellable continuations.
 --
@@ -49,11 +50,11 @@ handle ::
   HandlerBody ex f ss a ->
   (forall s. Handler ex f s -> Eff (s :& ss) a) ->
   Eff ss a
-handle _ h act = reset (\p -> act (Handler p h))
+handle _ h act = reset (\p -> act (MkHandler p h))
 
 -- | Call an operation of @f@ with cancellable continuations.
 call :: (ex :> es, s :> es) => Handler ex f s -> f a -> Eff es a
-call (Handler p h) op = shift0 p (\k -> h op k)
+call (MkHandler p h) op = shift0 p (\k -> h op k)
 
 -- | Resume by throwing a dynamic exception.
 --
@@ -73,12 +74,13 @@ discontinue ex k e = resume k (throw ex e)
 discontinueIO :: (Exception e, io :> es0) => IOE io -> Continuation es0 es b a -> e -> Eff es a
 discontinueIO io = discontinue (ioeToDynExn io)
 
--- | 'discontinue' a continuation with the 'CancelContinuation' exception and catch it when it
+-- | 'discontinue' a continuation with the v'CancelContinuation' exception and catch it when it
 -- is re-thrown by the continuation.
 --
--- The continuation SHOULD re-throw 'CancelContinuation' if it catches it.
+-- The continuation SHOULD re-throw v'CancelContinuation' if it catches it.
 cancel :: (ex :> es0, ex :> es) => DynExn ex -> Continuation es0 es b a -> Eff es ()
 cancel ex k = catch ex (void (discontinue ex k CancelContinuation)) (\CancelContinuation -> pure ())
 
+-- | Exception thrown by 'cancel'.
 data CancelContinuation = CancelContinuation
   deriving (Show, Exception)

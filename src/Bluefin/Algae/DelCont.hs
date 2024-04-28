@@ -61,7 +61,7 @@ import qualified Bluefin.Exception as E
 
 -- | Tag for a prompt of type @Eff ss a@ and scope @s@.
 type PromptTag :: Effects -> Type -> Effects -> Type
-data PromptTag ss a s = PromptTag (PromptTag# a)
+data PromptTag ss a s = MkPromptTag (PromptTag# a)
 
 -- | Run the enclosed computation under a prompt of type @Eff ss a@.
 --
@@ -85,7 +85,7 @@ reset :: forall a ss.
   (forall s. PromptTag ss a s -> Eff (s :& ss) a) ->
   Eff ss a
 reset f = unsafeMkEff (\z0 -> case newPromptTag# z0 of
-    (# z1, tag #) -> prompt# tag (unsafeRunEff (f (PromptTag tag))) z1)
+    (# z1, tag #) -> prompt# tag (unsafeRunEff (f (MkPromptTag tag))) z1)
 
 -- | Continuations are slices of the call stack, or evaluation context.
 --
@@ -106,7 +106,7 @@ reset f = unsafeMkEff (\z0 -> case newPromptTag# z0 of
 -- function:
 --
 -- @
--- Continuation \\hole ->
+-- MkContinuation \\hole ->
 --   reset \\tag1 ->
 --     reset \\tag2 ->
 --       hole >>= etc
@@ -119,12 +119,12 @@ reset f = unsafeMkEff (\z0 -> case newPromptTag# z0 of
 --
 -- @
 -- reset \\tag0 ->
---  f (Continuation \\hole ->
+--  f (MkContinuation \\hole ->
 --   reset \\tag1 ->
 --     reset \\tag2 ->
 --       hole >>= etc)
 -- @
-newtype Continuation t s b a = Continuation (Eff t b -> Eff s a)
+newtype Continuation t s b a = MkContinuation (Eff t b -> Eff s a)
 
 -- | Extend the context of a continuation.
 weakenC1 :: Continuation t s b a -> Continuation (e :& t) (e :& s) b a
@@ -132,7 +132,7 @@ weakenC1 = coerce
 
 -- | Resume a continuation with a computation under it.
 resume :: Continuation t s b a -> Eff t b -> Eff s a
-resume (Continuation k) = k
+resume (MkContinuation k) = k
 
 -- | Resume a cancellable continuation with a result.
 --
@@ -167,7 +167,7 @@ shift0 :: forall s a b ss ss0.
   PromptTag ss a s ->
   (Continuation ss0 ss b a -> Eff ss a) ->
   Eff ss0 b
-shift0 (PromptTag tag) f = unsafeMkEff (\z0 ->
+shift0 (MkPromptTag tag) f = unsafeMkEff (\z0 ->
   control0# tag (\k# ->
     unsafeRunEff (f (unsafeContinuation# (prompt# tag . k#)))) z0)
 
@@ -183,4 +183,4 @@ unsafeRunEff :: Eff ss a -> IO# a
 unsafeRunEff (UnsafeMkEff (IO f)) = f
 
 unsafeContinuation# :: Continuation# b a -> Continuation t s b a
-unsafeContinuation# k = Continuation (unsafeMkEff . k . unsafeRunEff)
+unsafeContinuation# k = MkContinuation (unsafeMkEff . k . unsafeRunEff)

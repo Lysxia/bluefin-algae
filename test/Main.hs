@@ -123,7 +123,7 @@ cumulSum h = loop 0 where
     loop (m + n)
 
 feed :: Monad m => [i] -> Pipe o i m a -> m [o]
-feed xs0 (Pipe m) = m >>= loop xs0 where
+feed xs0 (MkPipe m) = m >>= loop xs0 where
   loop _ (Done _) = pure []
   loop xs (Yielding o k) = case xs of
     [] -> pure [o]

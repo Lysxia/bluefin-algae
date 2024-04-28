@@ -37,11 +37,11 @@ import Bluefin.Eff (Eff, Effects, type (:>))
 import Bluefin.IO (IOE)
 
 -- | Capability to catch and throw dynamic exceptions.
-data DynExn (ex :: Effects) = DynExn
+data DynExn (ex :: Effects) = UnsafeDynExn
 
 -- | Refine an 'IOE' capability to a 'DynExn'.
 ioeToDynExn :: IOE io -> DynExn io
-ioeToDynExn _ = DynExn
+ioeToDynExn _ = UnsafeDynExn
 
 -- | Throw an exception.
 throw :: (E.Exception e, ex :> es) => DynExn ex -> e -> Eff es a

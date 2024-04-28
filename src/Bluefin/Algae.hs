@@ -107,7 +107,7 @@ type HandlerBody' f ss a = (forall ss0 x. f x -> Continuation ss0 ss x a -> Eff 
 -- | Handler to call operations of the effect @f@.
 type Handler :: AEffect -> Effects -> Type
 data Handler f s where
-  Handler :: !(PromptTag ss a s) -> HandlerBody' f ss a -> Handler f s
+  MkHandler :: !(PromptTag ss a s) -> HandlerBody' f ss a -> Handler f s
 
 -- | Handle operations of @f@.
 --
@@ -127,11 +127,11 @@ handle' ::
   HandlerBody' f ss a ->
   (forall s. Handler f s -> Eff (s :& ss) a) ->
   Eff ss a
-handle' h act = reset (\p -> act (Handler p h))
+handle' h act = reset (\p -> act (MkHandler p h))
 
 -- | Call an operation of @f@.
 call :: s :> ss => Handler f s -> f a -> Eff ss a
-call (Handler p h) op = shift0 p (\k -> h op k)
+call (MkHandler p h) op = shift0 p (\k -> h op k)
 
 -- $cancel
 -- Cancellable continuations are useful to work with resource-management schemes

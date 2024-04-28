@@ -11,7 +11,7 @@
 --
 -- === Warning: Non-linear continuations
 --
--- The handlers 'forAllChoices' and 'enumerate' call continuations zero or twice.
+-- The handlers 'forAllChoices' and 'toList' call continuations zero or twice.
 -- Don't use them to handle a computation that must ensure linear usage of resources.
 module Bluefin.Algae.NonDeterminism
   ( -- * Operations

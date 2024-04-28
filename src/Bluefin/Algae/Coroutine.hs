@@ -49,7 +49,7 @@ execCoroutine h f = handle coroutineHandler f
 evalCoroutine :: forall o i a zz.
   (forall z. Handler (Coroutine o i) z -> Eff (z :& zz) a) ->
   Pipe o i (Eff zz) a
-evalCoroutine f = Pipe (handle coroutineHandler (wrap . f))
+evalCoroutine f = MkPipe (handle coroutineHandler (wrap . f))
   where
     coroutineHandler :: HandlerBody (Coroutine o i) zz (PipeEvent o i (Eff zz) a)
     coroutineHandler (Yield o) k = pure (Yielding o k)
@@ -58,7 +58,7 @@ evalCoroutine f = Pipe (handle coroutineHandler (wrap . f))
     wrap = fmap Done
 
 -- | A tree of 'Yielding' events interleaved with @m@ computations.
-newtype Pipe o i m a = Pipe (m (PipeEvent o i m a))
+newtype Pipe o i m a = MkPipe (m (PipeEvent o i m a))
 
 -- | Events of 'Pipe'.
 data PipeEvent o i m a
@@ -67,7 +67,7 @@ data PipeEvent o i m a
 
 -- | Run a 'Pipe' computation with a function to respond to every 'Yielding' event.
 execPipe :: Monad m => (o -> m i) -> Pipe o i m a -> m a
-execPipe h (Pipe m) = m >>= loop
+execPipe h (MkPipe m) = m >>= loop
   where
     loop (Done a) = pure a
     loop (Yielding o k) = h o >>= \i -> k i >>= loop
