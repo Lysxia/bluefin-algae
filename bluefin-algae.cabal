@@ -28,12 +28,13 @@ library
       Bluefin.Algae.DynExn
       Bluefin.Algae.DelCont
       Bluefin.Exception.Dynamic
-      Bluefin.Algae.Eff
       Bluefin.Algae.State
       Bluefin.Algae.Error
       Bluefin.Algae.Error.DynExn
       Bluefin.Algae.NonDeterminism
       Bluefin.Algae.Coroutine
+    reexported-modules:
+      Bluefin.Eff
     build-depends:
       bluefin >= 0.0.6 && < 0.1,
       bluefin-internal,
