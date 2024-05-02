@@ -1,14 +1,15 @@
 Algebraic effects and named handlers in Bluefin
 ===============================================
 
-Algebraic effects are a minimalistic basis for user-defined effects.
+Algebraic effects are a minimalistic basis for **user-defined effects**.
+Using algebraic effects, we can reimplement effects that were built-in the
+Bluefin library, and more.
+
 This package leverages the delimited continuations primitives added in
 GHC 9.6 to implement algebraic effects in the Bluefin effect system.
-Effects that were built-in the Bluefin library can be reimplemented
-from scratch using algebraic effects.
 
 This is an experimental project. There is a surprising performance
-characteristic to be aware of for practical applications.
+characteristic to be aware of for any practical applications.
 [Details down below.](#quadratic-behavior-of-non-tail-recursion)
 
 ## Highlights
