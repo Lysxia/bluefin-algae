@@ -57,21 +57,21 @@ modify h f = get h >>= put h . f
 modify' :: z :> zz => Handler (State s) z -> (s -> s) -> Eff zz ()
 modify' h f = get h >>= put' h . f
 
--- | Pure state handler.
+-- | Run a stateful computation from the given starting state.
 runState ::
   s ->  -- ^ Initial state
   (forall z. Handler (State s) z -> Eff (z :& zz) a) ->  -- ^ Stateful computation
   Eff zz (a, s)
 runState = runStateWith (,)
 
--- | Return only the result value.
+-- | Variant of 'runState' that returns only the result value.
 evalState ::
   s ->  -- ^ Initial state
   (forall z. Handler (State s) z -> Eff (z :& zz) a) ->  -- ^ Stateful computation
   Eff zz a
 evalState = runStateWith const
 
--- | Return only the final state.
+-- | Variant of 'runState' that returns only the final state.
 execState ::
   s ->  -- ^ Initial state
   (forall z. Handler (State s) z -> Eff (z :& zz) a) ->  -- ^ Stateful computation
