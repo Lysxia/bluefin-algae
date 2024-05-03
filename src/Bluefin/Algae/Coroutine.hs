@@ -166,10 +166,10 @@ type TransducerEff i o zz = forall void z. z :> zz => i -> Handler (Coroutine o 
 -- waits for an input @i@, or terminates with a result @a@.
 --
 -- @
--- +--------------+                  +--------------+
--- | 'Pipe' i o m a | ('Yielding' o)---> | 'CoPipe' i o m |
--- |              | <------(input i) |              |
--- +--------------+                  +--------------+
+-- +--------------+                  +----------------+
+-- | 'Pipe' i o m a | ('Yielding' o)---> | 'CoPipe' i o m a |
+-- |              | <------(input i) |                |
+-- +--------------+                  +----------------+
 --        v ('Done')
 --      +---+
 --      | a |
