@@ -64,9 +64,17 @@ module Bluefin.Algae.Coroutine
     -- 'forCoroutine' g f = 'runPipe' ('simpleTransducer' g) ('toPipe' f)
     -- 'withTransducer' g f = 'runPipe' g ('toPipe' f)
     -- @
+  , TransducerSEff
   , toTransducer
+  , PipeSEff
   , toPipe
   , withTransducer
+
+    -- ** Interpreting transducers and pipes as coroutines
+  , TransducerEff
+  , fromTransducer
+  , PipeEff
+  , fromPipe
   ) where
 
 import Data.Function (fix)
@@ -111,6 +119,7 @@ next (MkTransducer f) = f
 simpleTransducer :: Functor m => (i -> m o) -> Transducer i o m
 simpleTransducer f = fix $ \self -> MkTransducer (\i -> (\o -> (o, self)) <$> f i)
 
+-- | Transform the input and output of a transducer.
 mapTransducer :: Functor m =>
   (i' -> i) ->
   (o -> o') ->
@@ -136,6 +145,12 @@ eitherTransducer split = loop
 -- | Transducer with no input.
 voidTransducer :: Transducer Void o m
 voidTransducer = MkTransducer absurd
+
+-- | Representation of 'Transducer' as scoped 'Eff' computations.
+type TransducerSEff i o zz = forall void. i -> ScopedEff (Coroutine o i) zz void
+
+-- | Representation of 'Transducer' as 'Eff' computations.
+type TransducerEff i o zz = forall void z. z :> zz => i -> Handler (Coroutine o i) z -> Eff zz void
 
 -- * Pipes
 
@@ -219,20 +234,30 @@ loopPipe (MkPipe p) = p >>= loop
     loop (Done a) = pure a
     loop (Yielding o k) = k o >>= loop
 
+-- | Representation of 'Pipe' as scoped 'Eff' computations.
+type PipeSEff i o zz a = ScopedEff (Coroutine o i) zz a
+
+-- | Representation of 'Pipe' as 'Eff' computations.
+type PipeEff i o zz a = forall z. z :> zz => Handler (Coroutine o i) z -> Eff zz a
+
 -- * Handlers
 
 -- | Convert a coroutine that doesn't return into a 'Transducer'.
 toTransducer :: forall o i zz.
-  (forall void. i -> ScopedEff (Coroutine o i) zz void) ->
-  Transducer i o (Eff zz)
+  TransducerSEff i o zz -> Transducer i o (Eff zz)
 toTransducer f = MkTransducer (\o -> handle coroutineHandler (f o))
   where
     coroutineHandler :: HandlerBody (Coroutine o i) zz (o, Transducer i o (Eff zz))
     coroutineHandler (Yield i) k = pure (i, MkTransducer k)
 
+-- | Convert a 'Transducer' into a coroutine.
+fromTransducer :: Transducer i o (Eff zz) -> TransducerEff i o zz
+fromTransducer t0 i0 h = loop t0 i0 where
+  loop t i = next t i >>= \(o, t') -> yield h o >>= loop t'
+
 -- | Evaluate a coroutine into a 'Pipe'.
 toPipe :: forall o i a zz.
-  ScopedEff (Coroutine o i) zz a ->
+  PipeSEff i o zz a ->
   Pipe i o (Eff zz) a
 toPipe f = MkPipe (handle coroutineHandler (wrap . f))
   where
@@ -241,6 +266,12 @@ toPipe f = MkPipe (handle coroutineHandler (wrap . f))
 
     wrap :: Eff (z :& zz) a -> Eff (z :& zz) (PipeEvent i o (Eff zz) a)
     wrap = fmap Done
+
+-- | Convet a 'Pipe' into a coroutine.
+fromPipe :: Pipe i o (Eff zz) a -> PipeEff i o zz a
+fromPipe (MkPipe p) h = p >>= loop where
+  loop (Done a) = pure a
+  loop (Yielding o k) = yield h o >>= \i -> k i >>= loop
 
 -- | Interleave the execution of a transducer and a coroutine.
 withTransducer :: forall o i a zz.

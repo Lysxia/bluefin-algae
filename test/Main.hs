@@ -206,7 +206,7 @@ infixl 4 +|, +||
 -- The coroutines are numbered sequentially.
 (+|) :: forall n i o zz. KnownNat n =>
   Transducer (Finite n, i) o (Eff zz) ->
-  (forall void. i -> ScopedEff (Coroutine o i) zz void) ->
+  TransducerSEff i o zz ->
   Transducer (Finite (n + 1), i) o (Eff zz)
 (+|) l r = eitherTransducer split l r'
   where
@@ -216,7 +216,7 @@ infixl 4 +|, +||
 -- | Add one last hot potato coroutine.
 (+||) :: forall n i o zz a. KnownNat n =>
   Transducer (Finite n, i) o (Eff zz) ->
-  ScopedEff (Coroutine o i) zz a ->
+  PipeSEff i o zz a ->
   Pipe (Cid (n + 1), i) o (Eff zz) a
 (+||) l r = eitherPipe (\(Cid c, potato) -> split (c, potato)) l r'
   where
