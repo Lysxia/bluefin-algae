@@ -65,6 +65,8 @@ module Bluefin.Algae.Coroutine
   , forCoPipe
   , loopPipe
   , loopCoPipe
+  , feedPipe
+  , feedCoPipe
 
     -- ** Handlers involving pipes
 
@@ -270,6 +272,16 @@ type CoPipeSEff i o zz a = i -> ScopedEff (Coroutine o i) zz a
 -- | Representation of 'CoPipe' as 'Eff' computations.
 type CoPipeEff i o zz a = forall z. z :> zz => i -> Handler (Coroutine o i) z -> Eff zz a
 
+-- | Run a 'Pipe' with a fixed number of inputs.
+feedPipe :: Monad m => [i] -> Pipe i o m a -> m [o]
+feedPipe is (MkPipe m) = m >>= \e -> case e of
+  Done _ -> pure []
+  Yielding o k -> (o :) <$> feedCoPipe is k
+
+-- | Run a 'CoPipe' with a fixed number of inputs.
+feedCoPipe :: Monad m => [i] -> CoPipe i o m a -> m [o]
+feedCoPipe [] _ = pure []
+feedCoPipe (i : is) (MkCoPipe k) = feedPipe is (k i)
 
 -- * Handlers
 

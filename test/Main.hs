@@ -118,7 +118,7 @@ toStream f h = NonDet.forAllChoices f (yield h)
 testNonDet :: TestTree
 testNonDet = testGroup "NonDet"
   [ testCase "coin-flip" $ coinFlipList @?= [True, False]
-  , testCase "via-stream" $ runPureEff (consume [(), ()] (toStream coinFlip)) @?= [True, False]
+  , testCase "via-stream" $ runPureEff (feedCoroutine [(), ()] (toStream coinFlip)) @?= [True, False]
   ]
 
 -- * Streaming
@@ -129,12 +129,13 @@ cumulSum h = loop 0 where
     m <- yield h n
     loop (m + n)
 
-feed :: Monad m => [i] -> Pipe i o m a -> m [o]
-feed xs0 (MkPipe m) = m >>= loop xs0 where
-  loop _ (Done _) = pure []
-  loop xs (Yielding o k) = case xs of
-    [] -> pure [o]
-    i : ys -> (o :) <$> (stepPipe (applyCoPipe k i) >>= loop ys)
+feedCoroutine :: [i] -> (forall zz0. ScopedEff (Coroutine o i) zz0 a) -> Eff zz [o]
+feedCoroutine is f = do
+  r <- try \err -> runState (is, []) \state ->
+    forCoroutine f (coyield state err)
+  pure $ reverse $ case r of
+    Left os -> os
+    Right (_, (_, os)) -> os
 
 coyield :: (z :> zz, z' :> zz) =>
   Handler (State ([i], [o])) z -> Handler (Error [o]) z' -> o -> Eff zz i
@@ -143,14 +144,6 @@ coyield state err o = do
   case is of
     [] -> throw err (o : os)
     i : ys -> put state (ys, o : os) >> pure i
-
-consume :: [i] -> (forall z0 zz0. Handler (Coroutine o i) z0 -> Eff (z0 :& zz0) a) -> Eff zz [o]
-consume is f = do
-  r <- try \err -> runState (is, []) \state ->
-    forCoroutine f (coyield state err)
-  pure $ reverse $ case r of
-    Left os -> os
-    Right (_, (_, os)) -> os
 
 -- * Concurrency
 
@@ -220,8 +213,8 @@ split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (coerce (separateS
 
 testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"
-  [ testCase "cumul-sum" $ runPureEff (feed [1,2,3] (toPipe cumulSum)) @?= [0,1,3,6]
-  , testCase "consume-sum" $ runPureEff (consume [1,2,3] cumulSum) @?= [0,1,3,6]
+  [ testCase "feedPipe-sum" $ runPureEff (feedPipe [1,2,3] (toPipe cumulSum)) @?= [0,1,3,6]
+  , testCase "feedCoroutine-sum" $ runPureEff (feedCoroutine [1,2,3] cumulSum) @?= [0,1,3,6]
   , testCase "hotpotato" $ hotpotatoes @?= Cid 1
   ]
 
