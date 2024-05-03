@@ -9,12 +9,8 @@
 module Main (main) where
 
 import Control.Monad (join)
-import Data.Bifunctor (bimap)
-import Data.Coerce (coerce)
 import Data.Functor (void)
-import Data.Finite (Finite, finite, getFinite, moduloProxy, separateSum, separateZero)
 import Data.Void (Void, absurd)
-import GHC.TypeNats (KnownNat, type (+))
 import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
 import Bluefin.Eff (Eff, runPureEff, runEff, bracket, type (:&), type (:>))
@@ -148,14 +144,11 @@ coyield state err o = do
 -- * Concurrency
 
 -- | Coroutine identifier
-newtype Cid n = Cid (Finite n) deriving (Eq, Show)
+newtype Cid = Cid Int deriving (Eq, Show)
 
-cid :: KnownNat n => Integer -> Cid n
-cid = Cid . finite
-
--- | Next coroutine identifier (wraps around).
-nextCid :: KnownNat n => Cid n -> Cid n
-nextCid (Cid n) = Cid $ moduloProxy n (getFinite n + 1)  -- (cid+1) `mod` n
+-- | Next coroutine identifier (wraps around at maxCid).
+nextCid :: Cid -> Cid
+nextCid (Cid c) = Cid (c + 1)
 
 type Yell a = Error a
 
@@ -165,12 +158,12 @@ type Yell a = Error a
 -- - if it is too hot (@potato > 0@), pass the potato to the next coroutine,
 --   the potato cools down slightly at every pass;
 -- - once the potato is cool enough, the coroutine which owns the potato yells its @Cid@.
-hotpotato :: (KnownNat n, z :> zz, z' :> zz) =>
-  Handler (Yell (Cid n)) z ->  -- ^ the coroutine may yell using this handle
-  Cid n ->                     -- ^ coroutine ID
-  Int ->                       -- ^ hot @potato@
-  Handler (Coroutine (Cid n, Int) Int) z' ->  -- ^ handle to yield to another coroutine
-  Eff zz void                  -- ^ does not return (the yell is an exception)
+hotpotato :: (z :> zz, z' :> zz) =>
+  Handler (Yell Cid) z ->  -- ^ the coroutine may yell using this handle
+  Cid ->                   -- ^ coroutine ID
+  Int ->                   -- ^ hot @potato@
+  Handler (Coroutine (Cid, Int) Int) z' ->  -- ^ handle to yield to another coroutine
+  Eff zz void              -- ^ does not return (the yell is an exception)
 hotpotato yell c potato0 cr = loop potato0 where
   loop potato | potato > 0 = do                  -- if potato is too hot,
     potato' <- yield cr (nextCid c, potato - 1)  -- pass to the next coroutine, the potato cools down,
@@ -178,38 +171,41 @@ hotpotato yell c potato0 cr = loop potato0 where
   loop _ | otherwise = throw yell c  -- if potato has cooled down, we won the potato.
 
 -- | Four coroutines play the hot potato game.
-hotpotatoes :: Cid 4
+hotpotatoes :: Cid
 hotpotatoes = runPureEff do
   e <- try \yell ->
-    loopCoPipe
-      (  nobody
-      +| hotpotato yell (cid 0 :: Cid 4)
-      +| hotpotato yell (cid 1 :: Cid 4)
-      +| hotpotato yell (cid 2 :: Cid 4)
-      +| hotpotato yell (cid 3 :: Cid 4)) (Cid 3, 42)
+    -- Wrap Cid into [0 .. 3]
+    let wrapCid = mapCoPipe id (\(Cid n, potato) -> (Cid (n `mod` 4), potato)) id in
+    loopCoPipe (wrapCid
+      (  hotpotato yell (Cid 0)
+      +| hotpotato yell (Cid 1)
+      +| hotpotato yell (Cid 2)
+      +| hotpotato yell (Cid 3)
+      +| nobody)) (Cid 3, 42)
   case e of
     Left c -> pure c
     Right o -> absurd o
 
 -- | Empty copipe
-nobody :: CoPipe (Cid 0, Int) o (Eff zz) void
-nobody = mapCoPipe (\(Cid n, _) -> separateZero n) id id voidCoPipe
+nobody :: CoPipe (Cid, Int) o (Eff zz) void
+nobody = mapCoPipe (\(_, _) -> error "don't call me") id id voidCoPipe
 
-infixl 4 +|
+infixr 4 +|
 
 -- | Add another hot potato coroutine to the mix.
 --
 -- The coroutines are numbered sequentially.
-(+|) :: KnownNat n =>
-  CoPipe (Cid n, i) o (Eff zz) Void ->
-  CoPipeSEff i o zz a ->
-  CoPipe (Cid (n + 1), i) o (Eff zz) a
-(+|) l r = eitherCoPipe split l r'
+(+|) ::
+  CoPipeSEff i o zz Void ->
+  CoPipe (Cid, i) o (Eff zz) a ->
+  CoPipe (Cid, i) o (Eff zz) a
+(+|) l r = eitherCoPipe split l' r
   where
-    r' = mapCoPipe (\(_ :: Cid 1, potato) -> potato) id id (toCoPipe r)
+    l' = mapCoPipe (\(_ :: Cid, potato) -> potato) id id (toCoPipe l)
 
-split :: forall n i. KnownNat n => (Cid (n + 1), i) -> Either (Cid n, i) (Cid 1, i)
-split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (coerce (separateSum @n @1) c)
+split :: (Cid, i) -> Either (Cid, i) (Cid, i)
+split (Cid 0, potato) = Left (Cid 0, potato)
+split (Cid c, potato) = Right (Cid (c-1), potato)
 
 testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"
