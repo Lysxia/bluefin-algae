@@ -4,13 +4,16 @@
   DataKinds,
   RankNTypes,
   ScopedTypeVariables,
+  TypeApplications,
   TypeOperators #-}
 module Main (main) where
 
 import Control.Monad (join)
 import Data.Bifunctor (bimap)
+import Data.Coerce (coerce)
 import Data.Functor (void)
 import Data.Finite (Finite, finite, getFinite, moduloProxy, separateSum, separateZero)
+import Data.Void (absurd)
 import GHC.TypeNats (KnownNat, type (+))
 import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
@@ -181,47 +184,39 @@ hotpotato yell c potato0 cr = loop potato0 where
     loop potato'                                 -- wait for the potato to come back and repeat.
   loop _ | otherwise = throw yell c  -- if potato has cooled down, we won the potato.
 
--- | Four hot potato coroutines play.
+-- | Four coroutines play the hot potato game.
 hotpotatoes :: Cid 4
 hotpotatoes = runPureEff do
   e <- try \yell ->
-    loopPipe
-      (   nobody
-      +|  hotpotato yell (cid 0 :: Cid 4)
-      +|  hotpotato yell (cid 1 :: Cid 4)
-      +|  hotpotato yell (cid 2 :: Cid 4)
-      +|| hotpotato yell (cid 3 :: Cid 4) 42 )
+    loopTransducer
+      (  nobody
+      +| hotpotato yell (cid 0 :: Cid 4)
+      +| hotpotato yell (cid 1 :: Cid 4)
+      +| hotpotato yell (cid 2 :: Cid 4)
+      +| hotpotato yell (cid 3 :: Cid 4)) (Cid 3, 42)
   case e of
     Left c -> pure c
-    Right _ -> error "should not happen"
+    Right o -> absurd o
 
 -- | Empty transducer
-nobody :: Transducer (Finite 0, Int) o (Eff zz)
-nobody = mapTransducer (separateZero . fst) id voidTransducer
+nobody :: Transducer (Cid 0, Int) o (Eff zz)
+nobody = mapTransducer (\(Cid n, _) -> separateZero n) id voidTransducer
 
-infixl 4 +|, +||
+infixl 4 +|
 
 -- | Add another hot potato coroutine to the mix.
 --
 -- The coroutines are numbered sequentially.
-(+|) :: forall n i o zz. KnownNat n =>
-  Transducer (Finite n, i) o (Eff zz) ->
+(+|) :: KnownNat n =>
+  Transducer (Cid n, i) o (Eff zz) ->
   TransducerSEff i o zz ->
-  Transducer (Finite (n + 1), i) o (Eff zz)
+  Transducer (Cid (n + 1), i) o (Eff zz)
 (+|) l r = eitherTransducer split l r'
   where
-    split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (separateSum c)
-    r' = mapTransducer (\(_ :: Finite 1, potato) -> potato) id (toTransducer r)
+    r' = mapTransducer (\(_ :: Cid 1, potato) -> potato) id (toTransducer r)
 
--- | Add one last hot potato coroutine.
-(+||) :: forall n i o zz a. KnownNat n =>
-  Transducer (Finite n, i) o (Eff zz) ->
-  PipeSEff i o zz a ->
-  Pipe (Cid (n + 1), i) o (Eff zz) a
-(+||) l r = eitherPipe (\(Cid c, potato) -> split (c, potato)) l r'
-  where
-    split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (separateSum c)
-    r' = mapPipe (\(_ :: Finite 1, potato) -> potato) id id (toPipe r)
+split :: forall n i. KnownNat n => (Cid (n + 1), i) -> Either (Cid n, i) (Cid 1, i)
+split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (coerce (separateSum @n @1) c)
 
 testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"

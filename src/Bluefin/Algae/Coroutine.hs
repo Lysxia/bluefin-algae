@@ -42,6 +42,7 @@ module Bluefin.Algae.Coroutine
   , mapTransducer
   , voidTransducer
   , eitherTransducer
+  , loopTransducer
 
     -- ** Pipes
   , Pipe(..)
@@ -106,6 +107,8 @@ yield h o = call h (Yield o)
 -- |                  | <-(output o) |                    |
 -- +------------------+              +--------------------+
 -- @
+--
+-- @'Transducer' i o m@ is equivalent to @'CoPipe' i o m Void@.
 newtype Transducer i o m = MkTransducer (i -> CoTransducer i o m)
 
 -- | Intermediate state of a 'Transducer' after receiving an input @i@.
@@ -145,6 +148,11 @@ eitherTransducer split = loop
 -- | Transducer with no input.
 voidTransducer :: Transducer Void o m
 voidTransducer = MkTransducer absurd
+
+loopTransducer :: Monad m => Transducer o o m -> o -> m void
+loopTransducer t0 o0 = loop (o0, t0)
+  where
+    loop (o, t) = next t o >>= loop
 
 -- | Representation of 'Transducer' as scoped 'Eff' computations.
 type TransducerSEff i o zz = forall void. i -> ScopedEff (Coroutine o i) zz void
