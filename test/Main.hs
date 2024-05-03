@@ -140,14 +140,14 @@ coyield state err o = do
 consume :: [i] -> (forall z0 zz0. Handler (Coroutine o i) z0 -> Eff (z0 :& zz0) a) -> Eff zz [o]
 consume is f = do
   r <- try \err -> runState (is, []) \state ->
-    execCoroutine (coyield state err) f
+    forCoroutine f (coyield state err)
   pure $ reverse $ case r of
     Left os -> os
     Right (_, (_, os)) -> os
 
 testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"
-  [ testCase "cumul-sum" $ runPureEff (feed [1,2,3] (evalCoroutine cumulSum)) @?= [0,1,3,6]
+  [ testCase "cumul-sum" $ runPureEff (feed [1,2,3] (toPipe cumulSum)) @?= [0,1,3,6]
   , testCase "consume-sum" $ runPureEff (consume [1,2,3] cumulSum) @?= [0,1,3,6]
   ]
 
