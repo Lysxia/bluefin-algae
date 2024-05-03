@@ -16,6 +16,32 @@ characteristic to be aware of for any practical applications.
 
 ### Concurrency
 
+Algebraic effects can implement cooperative multithreading.
+
+In the following example, two threads yield a string back and forth,
+appending a suffix every time.
+
+```
+pingpong :: Eff ss String
+pingpong = 'withCoroutine' coThread mainThread
+  where
+    coThread z0 h = do
+      z1 <- 'yield' h (z0 ++ "pong")
+      z2 <- 'yield' h (z1 ++ "dong")
+      'yield' h (z2 ++ "bong")
+    mainThread h = do
+      s1 <- 'yield' h "ping"
+      s2 <- 'yield' h (s1 ++ "ding")
+      s3 <- 'yield' h (s2 ++ "bing")
+      pure s3
+
+-- runPureEff pingpong == "pingpongdingdongbingbong"
+```
+
+Note that, under the hood, `coThread` and `mainThread` are two `IO` computations.
+And we can interleave their executions without native multithreading. This is the
+power of delimited continuations.
+
 ### Nondeterminism
 
 ### Truly scoped exceptions.
