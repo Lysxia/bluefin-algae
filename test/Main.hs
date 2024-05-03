@@ -17,8 +17,8 @@ import Bluefin.Eff (Eff, runPureEff, runEff, bracket, type (:&), type (:>))
 import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
-import Bluefin.Algae.Error
-import qualified Bluefin.Algae.Error.DynExn as EC
+import Bluefin.Algae.Exception
+import qualified Bluefin.Algae.Exception.DynExn as EC
 import qualified Bluefin.Algae.NonDeterminism as NonDet
 import Bluefin.Algae.Coroutine
 import qualified Bluefin.Exception as E
@@ -60,36 +60,36 @@ testState = testGroup "State"
   , testCase "litmus-1" $ bluefinStateLitmus @?= [1,3]
   ]
 
--- * Error
+-- * Exception
 
 onException :: Eff es a -> Eff es () -> Eff es a
 onException run post = bracket (pure ()) (\_ -> post) (\_ -> run)
 
-errorLitmus :: Int
-errorLitmus = runPureEff $ snd <$> runState 0 \state ->
-  void (try \err ->
-    onException (throw err ()) (void (incr state)))
+exceptionLitmus :: Int
+exceptionLitmus = runPureEff $ snd <$> runState 0 \state ->
+  void (try \exn ->
+    onException (throw exn ()) (void (incr state)))
 
-errorDynLitmus :: IO Int
-errorDynLitmus = runEff \io -> snd <$> runState 0 \state ->
-  void (EC.try (ED.ioeToDynExn io) \err ->
-    onException (EC.throw err ()) (void (incr state)))
+exceptionDynLitmus :: IO Int
+exceptionDynLitmus = runEff \io -> snd <$> runState 0 \state ->
+  void (EC.try (ED.ioeToDynExn io) \exn ->
+    onException (EC.throw exn ()) (void (incr state)))
 
-errorNoCancelLitmus :: Int
-errorNoCancelLitmus = runPureEff $ snd <$> runState 0 \state ->
-  void (try' \err ->
-    onException (throw err ()) (void (incr state)))
+exceptionNoCancelLitmus :: Int
+exceptionNoCancelLitmus = runPureEff $ snd <$> runState 0 \state ->
+  void (try' \exn ->
+    onException (throw exn ()) (void (incr state)))
 
 exnLitmus :: Int
 exnLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (E.try \exn ->
     onException (E.throw exn ()) (void (incr state)))
 
-testError :: TestTree
-testError = testGroup "Error"
-  [ testCase "litmus-error" $ errorLitmus @?= 1
-  , testCase "litmus-error-dyn" $ errorDynLitmus >>= \n -> n @?= 1
-  , testCase "litmus-error-no-cancel" $ errorNoCancelLitmus @?= 0
+testException :: TestTree
+testException = testGroup "Exception"
+  [ testCase "litmus-exception" $ exceptionLitmus @?= 1
+  , testCase "litmus-exception-dyn" $ exceptionDynLitmus >>= \n -> n @?= 1
+  , testCase "litmus-exception-no-cancel" $ exceptionNoCancelLitmus @?= 0
   , testCase "litmus-exn" $ exnLitmus @?= 1
   ]
 
@@ -127,18 +127,18 @@ cumulSum h = loop 0 where
 
 feedCoroutine :: [i] -> (forall zz0. ScopedEff (Coroutine o i) zz0 a) -> Eff zz [o]
 feedCoroutine is f = do
-  r <- try \err -> runState (is, []) \state ->
-    forCoroutine f (coyield state err)
+  r <- try \exn -> runState (is, []) \state ->
+    forCoroutine f (coyield state exn)
   pure $ reverse $ case r of
     Left os -> os
     Right (_, (_, os)) -> os
 
 coyield :: (z :> zz, z' :> zz) =>
-  Handler (State ([i], [o])) z -> Handler (Error [o]) z' -> o -> Eff zz i
-coyield state err o = do
+  Handler (State ([i], [o])) z -> Handler (Exception [o]) z' -> o -> Eff zz i
+coyield state exn o = do
   (is, os) <- get state
   case is of
-    [] -> throw err (o : os)
+    [] -> throw exn (o : os)
     i : ys -> put state (ys, o : os) >> pure i
 
 -- * Concurrency
@@ -150,7 +150,7 @@ newtype Cid = Cid Int deriving (Eq, Show)
 nextCid :: Cid -> Cid
 nextCid (Cid c) = Cid (c + 1)
 
-type Yell a = Error a
+type Yell a = Exception a
 
 -- | Hot potato coroutine:
 --
@@ -220,7 +220,7 @@ main = defaultMain tests
 tests :: TestTree
 tests = testGroup "Tests"
   [ testState
-  , testError
+  , testException
   , testNonDet
   , testCoroutine
   ]

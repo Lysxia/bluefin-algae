@@ -7,9 +7,9 @@
   StandaloneKindSignatures,
   TypeOperators #-}
 
--- | = Errors as an algebraic effect
+-- | = Exceptions as an algebraic effect
 --
--- These scoped errors are similar to "Bluefin.Exception".
+-- These scoped exceptions are similar to "Bluefin.Exception".
 --
 -- Algebraic operations in Bluefin are truly scoped:
 -- they cannot be intercepted by exception handlers, notably 'Bluefin.Eff.bracket'.
@@ -19,9 +19,9 @@
 --
 -- The simpler variants 'catch'' and 'try'' don't use 'cancel', so they are
 -- faster when there is no 'Bluefin.Eff.bracket' to worry about.
-module Bluefin.Algae.Error
+module Bluefin.Algae.Exception
   ( -- * Operations
-    Error(..)
+    Exception(..)
   , throw
 
     -- * Default handlers
@@ -37,16 +37,16 @@ import Data.Kind (Type)
 import Bluefin.Eff (Eff, type (:&), type (:>))
 import Bluefin.Algae
 
--- | Error interface.
-data Error (e :: Type) (r :: Type) where
-  -- | Throw an error.
-  Throw :: e -> Error e r
+-- | Exception interface.
+data Exception (e :: Type) (r :: Type) where
+  -- | Throw an exception.
+  Throw :: e -> Exception e r
 
--- | Throw an error. Call the 'Throw' operation.
-throw :: z :> zz => Handler (Error e) z -> e -> Eff zz a
+-- | Throw an exception. Call the 'Throw' operation.
+throw :: z :> zz => Handler (Exception e) z -> e -> Eff zz a
 throw h e = call h (Throw e)
 
--- | Catch an error.
+-- | Catch an exception.
 --
 -- Simple version of 'catch' which just discards the continuation
 -- instead of explicitly cancelling it.
@@ -63,40 +63,40 @@ throw h e = call h (Throw e)
 -- then to 'cancel' the continuation).
 -- 'catch'' makes 'throw' traverse the stack only once.
 catch' :: forall e a zz.
-  (forall z. Handler (Error e) z -> Eff (z :& zz) a) ->  -- ^ Handled computation
-  (e -> Eff zz a) ->  -- ^ Error clause
+  (forall z. Handler (Exception e) z -> Eff (z :& zz) a) ->  -- ^ Handled computation
+  (e -> Eff zz a) ->  -- ^ Exception clause
   Eff zz a
-catch' f h = handle errorHandler f
+catch' f h = handle exceptionHandler f
   where
-    errorHandler :: HandlerBody (Error e) zz a
-    errorHandler (Throw e) _ = h e
+    exceptionHandler :: HandlerBody (Exception e) zz a
+    exceptionHandler (Throw e) _ = h e
 
--- | Return 'Either' the error or the result of the handled computation.
+-- | Return 'Either' the exception or the result of the handled computation.
 --
 -- Simple version of 'try' which discards the continuation (like 'catch'').
 try' :: forall e a zz.
-  (forall z. Handler (Error e) z -> Eff (z :& zz) a) ->
+  (forall z. Handler (Exception e) z -> Eff (z :& zz) a) ->
   Eff zz (Either e a)
 try' f = catch' (fmap Right . f) (pure . Left)
 
--- | Catch an error.
+-- | Catch an exception.
 --
 -- The continuation is canceled ('cancel') when
--- an error is thrown to this handler.
+-- an exception is thrown to this handler.
 catch :: forall e a zz.
-  (forall z. Handler (Error e) z -> Eff (z :& zz) a) ->
+  (forall z. Handler (Exception e) z -> Eff (z :& zz) a) ->
   (e -> Eff zz a) ->
   Eff zz a
-catch f h = handle' errorHandler f
+catch f h = handle' exceptionHandler f
   where
-    errorHandler :: HandlerBody' (Error e) zz a
-    errorHandler (Throw e) k = cancel k >> h e
+    exceptionHandler :: HandlerBody' (Exception e) zz a
+    exceptionHandler (Throw e) k = cancel k >> h e
 
--- | Return 'Either' the error or the result of the handled computation.
+-- | Return 'Either' the exception or the result of the handled computation.
 --
 -- The continuation is canceled ('cancel') when
--- an error is thrown to this handler.
+-- an exception is thrown to this handler.
 try :: forall e a zz.
-  (forall z. Handler (Error e) z -> Eff (z :& zz) a) ->
+  (forall z. Handler (Exception e) z -> Eff (z :& zz) a) ->
   Eff zz (Either e a)
 try f = catch (fmap Right . f) (pure . Left)

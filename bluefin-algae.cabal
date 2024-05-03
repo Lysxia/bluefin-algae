@@ -30,8 +30,8 @@ library
       Bluefin.Exception.Dynamic
       Bluefin.Algae.Reader
       Bluefin.Algae.State
-      Bluefin.Algae.Error
-      Bluefin.Algae.Error.DynExn
+      Bluefin.Algae.Exception
+      Bluefin.Algae.Exception.DynExn
       Bluefin.Algae.NonDeterminism
       Bluefin.Algae.Coroutine
     reexported-modules:
