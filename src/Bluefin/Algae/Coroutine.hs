@@ -39,6 +39,7 @@ module Bluefin.Algae.Coroutine
   , CoTransducer
   , next
   , simpleTransducer
+  , mapTransducer
   , voidTransducer
   , eitherTransducer
 
@@ -46,6 +47,7 @@ module Bluefin.Algae.Coroutine
   , Pipe(..)
   , PipeEvent(..)
   , CoPipe
+  , mapPipe
   , stepPipe
   , runPipe
   , forPipe
@@ -68,6 +70,7 @@ module Bluefin.Algae.Coroutine
   ) where
 
 import Data.Function (fix)
+import Data.Bifunctor (bimap)
 import Data.Void (Void, absurd)
 import Bluefin.Eff
 import Bluefin.Algae
@@ -108,6 +111,15 @@ next (MkTransducer f) = f
 simpleTransducer :: Functor m => (i -> m o) -> Transducer i o m
 simpleTransducer f = fix $ \self -> MkTransducer (\i -> (\o -> (o, self)) <$> f i)
 
+mapTransducer :: Functor m =>
+  (i' -> i) ->
+  (o -> o') ->
+  Transducer i o m ->
+  Transducer i' o' m
+mapTransducer fi fo t = loop t
+  where
+    loop (MkTransducer u) = MkTransducer (fmap (bimap fo loop) . u . fi)
+
 -- | Sum of transducers with the same output type, branching on the input type.
 eitherTransducer :: Functor m =>
   (i -> Either i1 i2) ->   -- ^ Dispatch input
@@ -132,7 +144,7 @@ voidTransducer = MkTransducer absurd
 --
 -- @
 -- +--------------+                  +--------------+
--- | 'Pipe' o i m a | ('Yielding' o)---> | 'CoPipe' o i m |
+-- | 'Pipe' i o m a | ('Yielding' o)---> | 'CoPipe' i o m |
 -- |              | <------(input i) |              |
 -- +--------------+                  +--------------+
 --        v ('Done')
@@ -140,22 +152,29 @@ voidTransducer = MkTransducer absurd
 --      | a |
 --      +---+
 -- @
-newtype Pipe o i m a = MkPipe (m (PipeEvent o i m a))
+newtype Pipe i o m a = MkPipe (m (PipeEvent i o m a))
 
 -- | Events of 'Pipe'.
-data PipeEvent o i m a
+data PipeEvent i o m a
   = Done a
-  | Yielding o (CoPipe o i m a)
+  | Yielding o (CoPipe i o m a)
 
 -- | Intermediate state of a 'Pipe' after yielding an output @o@.
-type CoPipe o i m a = i -> m (PipeEvent o i m a)
+type CoPipe i o m a = i -> m (PipeEvent i o m a)
 
 -- | Unwrap 'Pipe'.
-stepPipe :: Pipe o i m a -> m (PipeEvent o i m a)
+stepPipe :: Pipe i o m a -> m (PipeEvent i o m a)
 stepPipe (MkPipe m) = m
 
+-- | Transform inputs and outputs of a 'Pipe'.
+mapPipe :: Functor m => (i' -> i) -> (o -> o') -> (a -> a') -> Pipe i o m a -> Pipe i' o' m a'
+mapPipe fi fo fa (MkPipe m) = MkPipe (loop <$> m)
+  where
+    loop (Done a) = Done (fa a)
+    loop (Yielding o k) = Yielding (fo o) (fmap loop . k . fi)
+
 -- | Run a 'Pipe' with a transducer to respond to every event.
-runPipe :: Monad m => Transducer i o m -> Pipe i o m a -> m a
+runPipe :: Monad m => Transducer i o m -> Pipe o i m a -> m a
 runPipe t0 (MkPipe p) = p >>= loop t0
   where
     loop _ (Done a) = pure a
@@ -170,7 +189,7 @@ runPipe t0 (MkPipe p) = p >>= loop t0
 -- 'forPipe' p g = 'runPipe' ('simpleTransducer' g) p
 -- @
 forPipe :: Monad m =>
-  Pipe o i m a ->  -- ^ Iterator
+  Pipe i o m a ->  -- ^ Iterator
   (o -> m i) ->    -- ^ Loop body
   m a
 forPipe (MkPipe m) h = m >>= loop
@@ -183,8 +202,8 @@ forPipe (MkPipe m) h = m >>= loop
 eitherPipe :: Monad m =>
   (i -> Either i1 i2) ->   -- ^ Dispatch input
   Transducer i1 o m ->     -- ^ Left input transducer
-  Pipe o i2 m a ->         -- ^ Right input pipe
-  Pipe o i m a
+  Pipe i2 o m a ->         -- ^ Right input pipe
+  Pipe i o m a
 eitherPipe split t0 (MkPipe p) = MkPipe (p >>= loop t0)
   where
     (<&>) = flip fmap
@@ -214,13 +233,13 @@ toTransducer f = MkTransducer (\o -> handle coroutineHandler (f o))
 -- | Evaluate a coroutine into a 'Pipe'.
 toPipe :: forall o i a zz.
   ScopedEff (Coroutine o i) zz a ->
-  Pipe o i (Eff zz) a
+  Pipe i o (Eff zz) a
 toPipe f = MkPipe (handle coroutineHandler (wrap . f))
   where
-    coroutineHandler :: HandlerBody (Coroutine o i) zz (PipeEvent o i (Eff zz) a)
+    coroutineHandler :: HandlerBody (Coroutine o i) zz (PipeEvent i o (Eff zz) a)
     coroutineHandler (Yield o) k = pure (Yielding o k)
 
-    wrap :: Eff (z :& zz) a -> Eff (z :& zz) (PipeEvent o i (Eff zz) a)
+    wrap :: Eff (z :& zz) a -> Eff (z :& zz) (PipeEvent i o (Eff zz) a)
     wrap = fmap Done
 
 -- | Interleave the execution of a transducer and a coroutine.
