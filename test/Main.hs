@@ -13,7 +13,7 @@ import Data.Bifunctor (bimap)
 import Data.Coerce (coerce)
 import Data.Functor (void)
 import Data.Finite (Finite, finite, getFinite, moduloProxy, separateSum, separateZero)
-import Data.Void (absurd)
+import Data.Void (Void, absurd)
 import GHC.TypeNats (KnownNat, type (+))
 import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
@@ -134,7 +134,7 @@ feed xs0 (MkPipe m) = m >>= loop xs0 where
   loop _ (Done _) = pure []
   loop xs (Yielding o k) = case xs of
     [] -> pure [o]
-    i : ys -> (o :) <$> (k i >>= loop ys)
+    i : ys -> (o :) <$> (stepPipe (applyCoPipe k i) >>= loop ys)
 
 coyield :: (z :> zz, z' :> zz) =>
   Handler (State ([i], [o])) z -> Handler (Error [o]) z' -> o -> Eff zz i
@@ -188,7 +188,7 @@ hotpotato yell c potato0 cr = loop potato0 where
 hotpotatoes :: Cid 4
 hotpotatoes = runPureEff do
   e <- try \yell ->
-    loopTransducer
+    loopCoPipe
       (  nobody
       +| hotpotato yell (cid 0 :: Cid 4)
       +| hotpotato yell (cid 1 :: Cid 4)
@@ -198,9 +198,9 @@ hotpotatoes = runPureEff do
     Left c -> pure c
     Right o -> absurd o
 
--- | Empty transducer
-nobody :: Transducer (Cid 0, Int) o (Eff zz)
-nobody = mapTransducer (\(Cid n, _) -> separateZero n) id voidTransducer
+-- | Empty copipe
+nobody :: CoPipe (Cid 0, Int) o (Eff zz) void
+nobody = mapCoPipe (\(Cid n, _) -> separateZero n) id id voidCoPipe
 
 infixl 4 +|
 
@@ -208,12 +208,12 @@ infixl 4 +|
 --
 -- The coroutines are numbered sequentially.
 (+|) :: KnownNat n =>
-  Transducer (Cid n, i) o (Eff zz) ->
-  TransducerSEff i o zz ->
-  Transducer (Cid (n + 1), i) o (Eff zz)
-(+|) l r = eitherTransducer split l r'
+  CoPipe (Cid n, i) o (Eff zz) Void ->
+  CoPipeSEff i o zz a ->
+  CoPipe (Cid (n + 1), i) o (Eff zz) a
+(+|) l r = eitherCoPipe split l r'
   where
-    r' = mapTransducer (\(_ :: Cid 1, potato) -> potato) id (toTransducer r)
+    r' = mapCoPipe (\(_ :: Cid 1, potato) -> potato) id id (toCoPipe r)
 
 split :: forall n i. KnownNat n => (Cid (n + 1), i) -> Either (Cid n, i) (Cid 1, i)
 split (c, potato) = bimap (flip (,) potato) (flip (,) potato) (coerce (separateSum @n @1) c)

@@ -33,53 +33,65 @@ module Bluefin.Algae.Coroutine
   , withCoroutine
   , forCoroutine
 
-    -- * Transducers and pipes
-    -- ** Transducers
-  , Transducer(..)
-  , CoTransducer
-  , next
-  , simpleTransducer
-  , mapTransducer
-  , voidTransducer
-  , eitherTransducer
-  , loopTransducer
-
-    -- ** Pipes
+    -- * Pipes
+    -- ** Definition
   , Pipe(..)
   , PipeEvent(..)
-  , CoPipe
-  , mapPipe
+  , CoPipe(..)
+
+    -- ** Unwrap
   , stepPipe
-  , runPipe
-  , forPipe
+  , applyCoPipe
+  , next
+
+    -- ** Constructors
+  , simpleCoPipe
+  , voidCoPipe
+  , nothingPipe
+  , nothingCoPipe
+
+    -- ** Pipe combinators
+  , mapPipe
+  , mapCoPipe
   , eitherPipe
+  , eitherCoPipe
+  , openPipe
+  , openCoPipe
+
+    -- ** Destructors
+  , runPipe
+  , runCoPipe
+  , forPipe
+  , forCoPipe
   , loopPipe
+  , loopCoPipe
 
-    -- ** Handlers involving transducers and pipes
+    -- ** Handlers involving pipes
 
-    -- | Using the handlers 'toTransducer' and 'toPipe' as primitives,
+    -- | Using the handlers 'toCoPipe' and 'toPipe' as primitives,
     -- we can define the other handlers.
     --
     -- @
-    -- 'withCoroutine' g f = 'runPipe' ('toTransducer' g) ('toPipe' f)
-    -- 'forCoroutine' g f = 'runPipe' ('simpleTransducer' g) ('toPipe' f)
-    -- 'withTransducer' g f = 'runPipe' g ('toPipe' f)
+    -- 'withCoroutine' g f = 'runPipe' ('toCoPipe' g) ('toPipe' f)
+    -- 'forCoroutine' g f = 'runPipe' ('simpleCoPipe' g) ('toPipe' f)
+    -- 'withCoPipe' g f = 'runPipe' g ('toPipe' f)
     -- @
-  , TransducerSEff
-  , toTransducer
+  , CoPipeSEff
+  , toCoPipe
   , PipeSEff
   , toPipe
-  , withTransducer
+  , withCoPipe
 
-    -- ** Interpreting transducers and pipes as coroutines
-  , TransducerEff
-  , fromTransducer
+    -- ** Interpreting pipes as coroutines
+  , CoPipeEff
+  , fromCoPipe
   , PipeEff
   , fromPipe
   ) where
 
+import Data.Coerce (coerce)
 import Data.Function (fix)
-import Data.Bifunctor (bimap)
+import Data.Functor ((<&>))
 import Data.Void (Void, absurd)
 import Bluefin.Eff
 import Bluefin.Algae
@@ -95,74 +107,11 @@ data Coroutine o i a where
 yield :: z :> zz => Handler (Coroutine o i) z -> o -> Eff zz i
 yield h o = call h (Yield o)
 
--- * Transducers
-
--- | A 'Transducer' yields an @o@ for every @i@ you feed it.
---
--- Its interactions are described by the following diagram:
---
--- @
--- +------------------+              +--------------------+
--- | 'Transducer' o i m | (input i)--> | 'CoTransducer' o i m |
--- |                  | <-(output o) |                    |
--- +------------------+              +--------------------+
--- @
---
--- @'Transducer' i o m@ is equivalent to @'CoPipe' i o m Void@.
-newtype Transducer i o m = MkTransducer (i -> CoTransducer i o m)
-
--- | Intermediate state of a 'Transducer' after receiving an input @i@.
-type CoTransducer i o m = m (o, Transducer i o m)
-
--- | Apply a transducer to yield the next output and transducer state.
-next :: Transducer i o m -> i -> m (o, Transducer i o m)
-next (MkTransducer f) = f
-
--- | A transducer which runs the same function on every input.
-simpleTransducer :: Functor m => (i -> m o) -> Transducer i o m
-simpleTransducer f = fix $ \self -> MkTransducer (\i -> (\o -> (o, self)) <$> f i)
-
--- | Transform the input and output of a transducer.
-mapTransducer :: Functor m =>
-  (i' -> i) ->
-  (o -> o') ->
-  Transducer i o m ->
-  Transducer i' o' m
-mapTransducer fi fo t = loop t
-  where
-    loop (MkTransducer u) = MkTransducer (fmap (bimap fo loop) . u . fi)
-
--- | Sum of transducers with the same output type, branching on the input type.
-eitherTransducer :: Functor m =>
-  (i -> Either i1 i2) ->   -- ^ Dispatch input
-  Transducer i1 o m ->     -- ^ Left transducer
-  Transducer i2 o m ->     -- ^ Right transducer
-  Transducer i o m
-eitherTransducer split = loop
-  where
-    loop t1 t2 = MkTransducer (transduce_ t1 t2 . split)
-    (<<&>>) = flip (fmap . fmap)
-    transduce_ t1 t2 (Left i1) = next t1 i1 <<&>> \t1' -> loop t1' t2
-    transduce_ t1 t2 (Right i2) = next t2 i2 <<&>> \t2' -> loop t1 t2'
-
--- | Transducer with no input.
-voidTransducer :: Transducer Void o m
-voidTransducer = MkTransducer absurd
-
-loopTransducer :: Monad m => Transducer o o m -> o -> m void
-loopTransducer t0 o0 = loop (o0, t0)
-  where
-    loop (o, t) = next t o >>= loop
-
--- | Representation of 'Transducer' as scoped 'Eff' computations.
-type TransducerSEff i o zz = forall void. i -> ScopedEff (Coroutine o i) zz void
-
--- | Representation of 'Transducer' as 'Eff' computations.
-type TransducerEff i o zz = forall void z. z :> zz => i -> Handler (Coroutine o i) z -> Eff zz void
-
 -- * Pipes
 
--- | A 'Pipe' represents a coroutine as a tree: a 'Pipe' yields an output @o@ and
+-- | Output-first coroutine.
+--
+-- A 'Pipe' represents a coroutine as a tree: a 'Pipe' yields an output @o@ and
 -- waits for an input @i@, or terminates with a result @a@.
 --
 -- @
@@ -182,65 +131,132 @@ data PipeEvent i o m a
   = Done a
   | Yielding o (CoPipe i o m a)
 
--- | Intermediate state of a 'Pipe' after yielding an output @o@.
-type CoPipe i o m a = i -> m (PipeEvent i o m a)
+-- | Input-first coroutine. 'Pipe' continuation.
+newtype CoPipe i o m a = MkCoPipe (i -> Pipe i o m a)
 
 -- | Unwrap 'Pipe'.
 stepPipe :: Pipe i o m a -> m (PipeEvent i o m a)
-stepPipe (MkPipe m) = m
+stepPipe (MkPipe p) = p
+
+-- | Unwrap 'CoPipe'.
+applyCoPipe :: CoPipe i o m a -> i -> Pipe i o m a
+applyCoPipe (MkCoPipe k) = k
+
+-- | Apply a non-returning 'CoPipe' to yield the next output and 'CoPipe' state.
+next :: Functor m => CoPipe i o m Void -> i -> m (o, CoPipe i o m Void)
+next (MkCoPipe f) i = go <$> stepPipe (f i) where
+  go (Done v) = absurd v
+  go (Yielding o k) = (o, k)
+
+-- | A 'CoPipe' which runs the same function on every input.
+simpleCoPipe :: Functor m => (i -> m o) -> CoPipe i o m void
+simpleCoPipe f = fix $ \self -> MkCoPipe (\i -> MkPipe ((\o -> Yielding o self) <$> f i))
 
 -- | Transform inputs and outputs of a 'Pipe'.
 mapPipe :: Functor m => (i' -> i) -> (o -> o') -> (a -> a') -> Pipe i o m a -> Pipe i' o' m a'
-mapPipe fi fo fa (MkPipe m) = MkPipe (loop <$> m)
+mapPipe fi fo fa = mapPipe_
   where
+    mapPipe_ (MkPipe p) = MkPipe (loop <$> p)
     loop (Done a) = Done (fa a)
-    loop (Yielding o k) = Yielding (fo o) (fmap loop . k . fi)
+    loop (Yielding o k) = Yielding (fo o) (mapCoPipe_ k)
+    mapCoPipe_ (MkCoPipe k) = MkCoPipe (mapPipe_ . k . fi)
 
--- | Run a 'Pipe' with a transducer to respond to every event.
-runPipe :: Monad m => Transducer i o m -> Pipe o i m a -> m a
-runPipe t0 (MkPipe p) = p >>= loop t0
-  where
-    loop _ (Done a) = pure a
-    loop t (Yielding i k) = do
-      (o, t') <- next t i
-      k o >>= loop t'
+-- | Transform the input and output of a 'CoPipe'.
+mapCoPipe :: Functor m => (i' -> i) -> (o -> o') -> (a -> a') -> CoPipe i o m a -> CoPipe i' o' m a'
+mapCoPipe fi fo fa (MkCoPipe k) = MkCoPipe (mapPipe fi fo fa . k . fi)
+
+-- | Run a 'Pipe' with a 'CoPipe' to respond to every output.
+runPipe :: Monad m => CoPipe i o m Void -> Pipe o i m a -> m a
+runPipe t (MkPipe p) = p >>= \e -> case e of
+  Done a -> pure a
+  Yielding i k -> do
+    (o, t') <- next t i
+    runCoPipe t' k o
+
+-- | Run a 'CoPipe' with another 'CoPipe' to respond to every input.
+runCoPipe :: Monad m => CoPipe i o m Void -> CoPipe o i m a -> o -> m a
+runCoPipe t (MkCoPipe k) i = runPipe t (k i)
 
 -- | Iterate through a 'Pipe'. Respond to every 'Yielding' event by running the loop body.
 -- Return the final result of the 'Pipe'.
 --
 -- @
--- 'forPipe' p g = 'runPipe' ('simpleTransducer' g) p
+-- 'forPipe' p g = 'runPipe' ('simpleCoPipe' g) p
 -- @
 forPipe :: Monad m =>
   Pipe i o m a ->  -- ^ Iterator
   (o -> m i) ->    -- ^ Loop body
   m a
-forPipe (MkPipe m) h = m >>= loop
+forPipe p h = stepPipe p >>= loop
   where
     loop (Done a) = pure a
-    loop (Yielding o k) = h o >>= \i -> k i >>= loop
+    loop (Yielding o k) = h o >>= \i -> stepPipe (applyCoPipe k i) >>= loop
 
--- | Sum a transducer and a pipe with the same output type,
+-- | Iterate through a 'CoPipe'.
+forCoPipe :: Monad m =>
+  CoPipe i o m a ->
+  (o -> m i) ->
+  i -> m a
+forCoPipe (MkCoPipe k) h i = forPipe (k i) h
+
+-- | 'CoPipe' with no input.
+voidCoPipe :: CoPipe Void o m a
+voidCoPipe = MkCoPipe absurd
+
+-- | Sum a copipe and a pipe with the same output type,
 -- branching on the input type.
 eitherPipe :: Monad m =>
   (i -> Either i1 i2) ->   -- ^ Dispatch input
-  Transducer i1 o m ->     -- ^ Left input transducer
-  Pipe i2 o m a ->         -- ^ Right input pipe
+  CoPipe i1 o m Void ->    -- ^ Left copipe
+  Pipe i2 o m a ->         -- ^ Right pipe
   Pipe i o m a
-eitherPipe split t0 (MkPipe p) = MkPipe (p >>= loop t0)
+eitherPipe split t0 (MkPipe p) = MkPipe $ p <&> \e -> case e of
+  Done a -> Done a
+  Yielding o k -> Yielding o (eitherCoPipe split t0 k)
+
+-- | Sum two copipes with the same output type, branching on the input type.
+eitherCoPipe :: Functor m =>
+  (i -> Either i1 i2) ->   -- ^ Dispatch input
+  CoPipe i1 o m Void ->    -- ^ Left copipe
+  CoPipe i2 o m a ->       -- ^ Right copipe
+  CoPipe i o m a
+eitherCoPipe split = loop
   where
-    (<&>) = flip fmap
-    loop _ (Done a) = pure (Done a)
-    loop t (Yielding o k) = pure (Yielding o (switch t k . split))
-    switch t k (Left i1) = next t i1 <&> \(o, t') -> Yielding o (switch t' k . split)
-    switch t k (Right i2) = k i2 >>= loop t
+    loop t1 t2 = MkCoPipe (MkPipe . transduce_ t1 t2 . split)
+    transduce_ t1 t2 (Left i1) = next t1 i1 <&> \(o, t1') -> Yielding o (loop t1' t2)
+    transduce_ t1 (MkCoPipe t2) (Right i2) = stepPipe (t2 i2) <&> \e -> case e of
+      Done a -> Done a
+      Yielding o t2' -> Yielding  o (loop t1 t2')
 
 -- | Loop the output of a pipe back to its input.
 loopPipe :: Monad m => Pipe o o m a -> m a
-loopPipe (MkPipe p) = p >>= loop
-  where
-    loop (Done a) = pure a
-    loop (Yielding o k) = k o >>= loop
+loopPipe (MkPipe p) = p >>= \e -> case e of
+  Done a -> pure a
+  Yielding o k -> loopCoPipe k o
+
+-- | Forward the output of a 'CoPipe' to its input.
+loopCoPipe :: Monad m => CoPipe o o m a -> o -> m a
+loopCoPipe (MkCoPipe k) o = loopPipe (k o)
+
+-- | Convert a returning 'Pipe' into a non-returning 'CoPipe',
+-- yielding 'Nothing' forever once the end has been reached.
+openPipe :: Applicative m => Pipe i o m () -> Pipe i (Maybe o) m void
+openPipe (MkPipe p) = MkPipe (p <&> \e -> case e of
+  Done _ -> Yielding Nothing nothingCoPipe
+  Yielding o k -> Yielding (Just o) (openCoPipe k))
+
+-- | Convert a returning 'CoPipe' into a non-returning 'CoPipe',
+-- yielding 'Nothing' forever once the end has been reached.
+openCoPipe :: Applicative m => CoPipe i o m () -> CoPipe i (Maybe o) m void
+openCoPipe (MkCoPipe k) = MkCoPipe (openPipe . k)
+
+-- | Yield 'Nothing' forever.
+nothingPipe :: Applicative m => Pipe i (Maybe o) m void
+nothingPipe = MkPipe (pure (Yielding Nothing nothingCoPipe))
+
+-- | Yield 'Nothing' forever.
+nothingCoPipe :: Applicative m => CoPipe i (Maybe o) m void
+nothingCoPipe = MkCoPipe (\_ -> nothingPipe)
 
 -- | Representation of 'Pipe' as scoped 'Eff' computations.
 type PipeSEff i o zz a = ScopedEff (Coroutine o i) zz a
@@ -248,20 +264,23 @@ type PipeSEff i o zz a = ScopedEff (Coroutine o i) zz a
 -- | Representation of 'Pipe' as 'Eff' computations.
 type PipeEff i o zz a = forall z. z :> zz => Handler (Coroutine o i) z -> Eff zz a
 
+-- | Representation of 'CoPipe' as scoped 'Eff' computations.
+type CoPipeSEff i o zz a = i -> ScopedEff (Coroutine o i) zz a
+
+-- | Representation of 'CoPipe' as 'Eff' computations.
+type CoPipeEff i o zz a = forall z. z :> zz => i -> Handler (Coroutine o i) z -> Eff zz a
+
+
 -- * Handlers
 
--- | Convert a coroutine that doesn't return into a 'Transducer'.
-toTransducer :: forall o i zz.
-  TransducerSEff i o zz -> Transducer i o (Eff zz)
-toTransducer f = MkTransducer (\o -> handle coroutineHandler (f o))
-  where
-    coroutineHandler :: HandlerBody (Coroutine o i) zz (o, Transducer i o (Eff zz))
-    coroutineHandler (Yield i) k = pure (i, MkTransducer k)
+-- | Convert a coroutine that doesn't return into a 'CoPipe'.
+toCoPipe :: forall o i a zz.
+  CoPipeSEff i o zz a -> CoPipe i o (Eff zz) a
+toCoPipe f = MkCoPipe (\i -> toPipe (\h -> f i h))
 
--- | Convert a 'Transducer' into a coroutine.
-fromTransducer :: Transducer i o (Eff zz) -> TransducerEff i o zz
-fromTransducer t0 i0 h = loop t0 i0 where
-  loop t i = next t i >>= \(o, t') -> yield h o >>= loop t'
+-- | Convert a 'CoPipe' into a coroutine.
+fromCoPipe :: CoPipe i o (Eff zz) a -> CoPipeEff i o zz a
+fromCoPipe (MkCoPipe k) i h = fromPipe (k i) h
 
 -- | Evaluate a coroutine into a 'Pipe'.
 toPipe :: forall o i a zz.
@@ -270,25 +289,25 @@ toPipe :: forall o i a zz.
 toPipe f = MkPipe (handle coroutineHandler (wrap . f))
   where
     coroutineHandler :: HandlerBody (Coroutine o i) zz (PipeEvent i o (Eff zz) a)
-    coroutineHandler (Yield o) k = pure (Yielding o k)
+    coroutineHandler (Yield o) k = pure (Yielding o (coerce k))
 
     wrap :: Eff (z :& zz) a -> Eff (z :& zz) (PipeEvent i o (Eff zz) a)
     wrap = fmap Done
 
 -- | Convet a 'Pipe' into a coroutine.
 fromPipe :: Pipe i o (Eff zz) a -> PipeEff i o zz a
-fromPipe (MkPipe p) h = p >>= loop where
-  loop (Done a) = pure a
-  loop (Yielding o k) = yield h o >>= \i -> k i >>= loop
+fromPipe (MkPipe p) h = p >>= \e -> case e of
+  Done a -> pure a
+  Yielding o k -> yield h o >>= \i -> fromCoPipe k i h
 
--- | Interleave the execution of a transducer and a coroutine.
-withTransducer :: forall o i a zz.
-  Transducer i o (Eff zz) ->
-  ScopedEff (Coroutine i o) zz a ->
+-- | Interleave the execution of a copipe and a coroutine.
+withCoPipe :: forall o i a zz.
+  CoPipe i o (Eff zz) Void ->
+  ScopedEff (Coroutine i o) zz a ->  -- ^ Main coroutine
   Eff zz a
-withTransducer g f = with g (handle coroutineHandler (fmap wrap . f))
+withCoPipe g f = with g (handle coroutineHandler (fmap wrap . f))
   where
-    coroutineHandler :: HandlerBody (Coroutine i o) zz (Transducer i o (Eff zz) -> Eff zz a)
+    coroutineHandler :: HandlerBody (Coroutine i o) zz (CoPipe i o (Eff zz) Void -> Eff zz a)
     coroutineHandler (Yield o) k = pure $ \g1 -> do
       (i, g2) <- next g1 o
       with g2 (k i)
@@ -304,10 +323,10 @@ withTransducer g f = with g (handle coroutineHandler (fmap wrap . f))
 --
 -- The secondary thread cannot return (it can terminate by throwing an exception).
 withCoroutine :: forall o i a zz.
-  (forall void. i -> ScopedEff (Coroutine o i) zz void) ->  -- ^ Secondary thread
-  ScopedEff (Coroutine i o) zz a ->                         -- ^ Main thread
+  (i -> ScopedEff (Coroutine o i) zz Void) ->  -- ^ Secondary thread
+  ScopedEff (Coroutine i o) zz a ->            -- ^ Main thread
   Eff zz a
-withCoroutine g f = withTransducer (toTransducer g) f
+withCoroutine g f = withCoPipe (toCoPipe g) f
 
 -- | Iterate through a coroutine:
 -- execute the loop body @o -> Eff zz i@ for every call to 'Yield' in the coroutine.
