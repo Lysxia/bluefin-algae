@@ -78,6 +78,7 @@ module Bluefin.Algae
     -- * Simple interface
   , HandlerBody
   , Handler
+  , ScopedEff
   , handle
   , call
 
@@ -109,6 +110,9 @@ type Handler :: AEffect -> Effects -> Type
 data Handler f s where
   MkHandler :: !(PromptTag ss a s) -> HandlerBody' f ss a -> Handler f s
 
+-- | Effectful computation with a scoped 'Handler'.
+type ScopedEff f ss a = forall s. Handler f s -> Eff (s :& ss) a
+
 -- | Handle operations of @f@.
 --
 -- === Warning for exception-like effects
@@ -118,14 +122,14 @@ data Handler f s where
 -- prefer 'handle'' to trigger resource clean up with cancellable continuations.
 handle ::
   HandlerBody f ss a ->
-  (forall s. Handler f s -> Eff (s :& ss) a) ->
+  ScopedEff f ss a ->
   Eff ss a
 handle h = handle' (\f k -> h f (continue k))
 
 -- | Generalization of 'handle' with cancellable continuations.
 handle' ::
   HandlerBody' f ss a ->
-  (forall s. Handler f s -> Eff (s :& ss) a) ->
+  ScopedEff f ss a ->
   Eff ss a
 handle' h act = reset (\p -> act (MkHandler p h))
 
