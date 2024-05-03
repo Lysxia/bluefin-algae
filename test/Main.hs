@@ -8,7 +8,7 @@
   TypeOperators #-}
 module Main (main) where
 
-import Control.Monad (forever, join)
+import Control.Monad (join)
 import Data.Functor (void)
 import Data.Void (absurd)
 import Test.Tasty (defaultMain, testGroup, TestTree)
@@ -166,7 +166,7 @@ pingpong = withCoroutine coThread mainThread
     coThread z0 h = do
       z1 <- yield h (z0 ++ "pong")
       z2 <- yield h (z1 ++ "dong")
-      forever (yield h (z2 ++ "bong"))
+      yield h (z2 ++ "bong")
     mainThread h = do
       s1 <- yield h "ping"
       s2 <- yield h (s1 ++ "ding")

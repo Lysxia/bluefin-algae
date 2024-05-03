@@ -20,10 +20,10 @@
 -- @
 -- range1to4 :: z :> zz => Handler (Coroutine Int ()) z -> Eff zz ()
 -- range1to4 h = do
---   yield h 1
---   yield h 2
---   yield h 3
---   yield h 4
+--   'yield' h 1
+--   'yield' h 2
+--   'yield' h 3
+--   'yield' h 4
 -- @
 --
 -- The 'forCoroutine' handler is a "for" loop over an iterator,
@@ -34,7 +34,7 @@
 -- filterEven :: z :> zz => Handler (State [Int]) z -> Eff zz ()
 -- filterEven h =
 --   'forCoroutine' range1to4 \\n ->
---     if n `mod` 2 == 0
+--     if n \`mod\` 2 == 0
 --     then modify h (n :)
 --     else pure ()
 --
@@ -56,16 +56,16 @@
 --
 -- @
 -- pingpong :: Eff ss String
--- pingpong = withCoroutine coThread mainThread
+-- pingpong = 'withCoroutine' coThread mainThread
 --   where
 --     coThread z0 h = do
---       z1 <- yield h (z0 ++ "pong")
---       z2 <- yield h (z1 ++ "dong")
---       forever (yield h (z2 ++ "bong"))
+--       z1 <- 'yield' h (z0 ++ "pong")
+--       z2 <- 'yield' h (z1 ++ "dong")
+--       'yield' h (z2 ++ "bong")
 --     mainThread h = do
---       s1 <- yield h "ping"
---       s2 <- yield h (s1 ++ "ding")
---       s3 <- yield h (s2 ++ "bing")
+--       s1 <- 'yield' h "ping"
+--       s2 <- 'yield' h (s1 ++ "ding")
+--       s3 <- 'yield' h (s2 ++ "bing")
 --       pure s3
 --
 -- -- runPureEff pingpong == "pingpongdingdongbingbong"
@@ -75,27 +75,27 @@
 -- users pass a string to each other, extending it with breadcrumbs each time.
 --
 -- For example, @userLL@ sends a string to @userLR@ (identified using the
--- `Left (Right _)` constructors in the 'yield' argument). When @userLL@
+-- @Left (Right _)@ constructors in the 'yield' argument). When @userLL@
 -- receives a second string @s'@ (from anywhere, in this case it will come from
 -- @userRR@), it forwards it to @userRL@.
 --
 -- @
 -- echo :: Eff ss String
--- echo = loopCoPipe ((userLL |+ userLR) |+ (userRL |+ userRR)) (Left (Left "S"))
+-- echo = 'loopCoPipe' ((userLL |+ userLR) |+ (userRL |+ userRR)) (Left (Left \"S\"))
 --   where
---     userLL = toCoPipe \s h -> do
---       s' <- yield h (Left (Right (s ++ "-LL")))
---       yield h (Right (Left (s' ++ "-LL")))
---     userLR = toCoPipe \s h -> do
---       s' <- yield h (Right (Left (s ++ "-LR")))
---       yield h (Right (Right (s' ++ "-LR")))
---     userRL = toCoPipe \s h -> do
---       s' <- yield h (Right (Right (s ++ "-RL")))
---       yield h (Left (Right (s' ++ "-RL")))
---     userRR = toCoPipe \s h -> do
---       s' <- yield h (Left (Left (s ++ "-RR")))
---       pure (s' ++ "-RR")
---     (|+) = eitherCoPipe id
+--     userLL = 'toCoPipe' \\s h -> do
+--       s' <- 'yield' h (Left (Right (s ++ "-LL")))  -- send to userLR
+--       'yield' h (Right (Left (s' ++ "-LL")))       -- send to userRL
+--     userLR = 'toCoPipe' \\s h -> do
+--       s' <- 'yield' h (Right (Left (s ++ "-LR")))  -- send to userRL
+--       'yield' h (Right (Right (s' ++ "-LR")))      -- send to userRR
+--     userRL = 'toCoPipe' \\s h -> do
+--       s' <- 'yield' h (Right (Right (s ++ "-RL"))) -- send to userRR
+--       'yield' h (Left (Right (s' ++ "-RL")))       -- send to userLR
+--     userRR = 'toCoPipe' \\s h -> do
+--       s' <- 'yield' h (Left (Left (s ++ "-RR")))   -- send to userLL
+--       pure (s' ++ "-RR")                           -- terminate
+--     (|+) = 'eitherCoPipe' id
 --
 -- -- runPureEff echo == "S-LL-LR-RL-RR-LL-RL-LR-RR"
 -- @
@@ -401,15 +401,16 @@ fromPipe (MkPipe p) h = p >>= \e -> case e of
 
 -- | Interleave the execution of a copipe and a coroutine.
 withCoPipe :: forall o i a zz.
-  CoPipe i o (Eff zz) Void ->
-  ScopedEff (Coroutine i o) zz a ->  -- ^ Main coroutine
+  CoPipe i o (Eff zz) a ->
+  ScopedEff (Coroutine i o) zz a ->  -- ^ Starting coroutine
   Eff zz a
 withCoPipe g f = with g (handle coroutineHandler (fmap wrap . f))
   where
-    coroutineHandler :: HandlerBody (Coroutine i o) zz (CoPipe i o (Eff zz) Void -> Eff zz a)
+    coroutineHandler :: HandlerBody (Coroutine i o) zz (CoPipe i o (Eff zz) a -> Eff zz a)
     coroutineHandler (Yield o) k = pure $ \g1 -> do
-      (i, g2) <- next g1 o
-      with g2 (k i)
+      stepPipe (applyCoPipe g1 o) >>= \e -> case e of
+        Done a -> pure a
+        Yielding i g2 -> with g2 (k i)
 
     wrap :: a -> z -> Eff zz a
     wrap a _ = pure a
@@ -418,12 +419,10 @@ withCoPipe g f = with g (handle coroutineHandler (fmap wrap . f))
     with g' m = m >>= \f' -> f' g'
 
 -- | Interleave the execution of two coroutines, feeding each one's output to the other's input.
--- Return the result of the main thread.
---
--- The secondary thread cannot return (it can terminate by throwing an exception).
+-- Return the result of the first thread to terminate (the other is discarded)
 withCoroutine :: forall o i a zz.
-  (i -> ScopedEff (Coroutine o i) zz Void) ->  -- ^ Secondary thread
-  ScopedEff (Coroutine i o) zz a ->            -- ^ Main thread
+  (i -> ScopedEff (Coroutine o i) zz a) ->
+  ScopedEff (Coroutine i o) zz a ->         -- ^ Starting coroutine
   Eff zz a
 withCoroutine g f = withCoPipe (toCoPipe g) f
 
