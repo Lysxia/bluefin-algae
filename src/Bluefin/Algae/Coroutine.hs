@@ -10,12 +10,97 @@
 
 -- | = Coroutines: yield as an algebraic effect
 --
+-- == Iterators
+--
+-- A simple use case of coroutines is as an expressive way of defining iterators.
+--
+-- An iterator is just a program which yields values. The following example
+-- yields the integers 1, 2, 3, 4.
+--
+-- @
+-- range1to4 :: z :> zz => Handler (Coroutine Int ()) z -> Eff zz ()
+-- range1to4 h = do
+--   yield h 1
+--   yield h 2
+--   yield h 3
+--   yield h 4
+-- @
+--
+-- The 'forCoroutine' handler is a "for" loop over an iterator,
+-- running the loop body for every yielded element.
+-- Here we collect the even values into a list stored in mutable @State@.
+--
+-- @
+-- filterEven :: z :> zz => Handler (State [Int]) z -> Eff zz ()
+-- filterEven h =
+--   'forCoroutine' range1to4 \\n ->
+--     if n `mod` 2 == 0
+--     then modify h (n :)
+--     else pure ()
+--
+-- filterEvenResult :: [Int]
+-- filterEvenResult = runPureEff $ execState [] filterEven
+--
+-- -- 1 and 3 are filtered out, 2 and 4 are pushed into the queue
+-- in that order, so they appear in reverse order.
+-- -- filterEvenResult == [4,2]
+-- @
+--
+-- == Cooperative concurrency
+--
 -- Coroutines are "cooperative threads", passing control to other coroutines
 -- with explicit 'yield' calls.
 --
--- Coroutines are an expressive way of defining iterators.
+-- In the following example, two threads yield a string back and forth,
+-- appending a suffix every time.
 --
--- = References
+-- @
+-- pingpong :: Eff ss String
+-- pingpong = withCoroutine coThread mainThread
+--   where
+--     coThread z0 h = do
+--       z1 <- yield h (z0 ++ "pong")
+--       z2 <- yield h (z1 ++ "dong")
+--       forever (yield h (z2 ++ "bong"))
+--     mainThread h = do
+--       s1 <- yield h "ping"
+--       s2 <- yield h (s1 ++ "ding")
+--       s3 <- yield h (s2 ++ "bing")
+--       pure s3
+--
+-- -- runPureEff pingpong == "pingpongdingdongbingbong"
+-- @
+--
+-- More than two coroutines may be interleaved. In the snippet below, four
+-- users pass a string to each other, extending it with breadcrumbs each time.
+--
+-- For example, @userLL@ sends a string to @userLR@ (identified using the
+-- `Left (Right _)` constructors in the 'yield' argument). When @userLL@
+-- receives a second string @s'@ (from anywhere, in this case it will come from
+-- @userRR@), it forwards it to @userRL@.
+--
+-- @
+-- echo :: Eff ss String
+-- echo = loopCoPipe ((userLL |+ userLR) |+ (userRL |+ userRR)) (Left (Left "S"))
+--   where
+--     userLL = toCoPipe \s h -> do
+--       s' <- yield h (Left (Right (s ++ "-LL")))
+--       yield h (Right (Left (s' ++ "-LL")))
+--     userLR = toCoPipe \s h -> do
+--       s' <- yield h (Right (Left (s ++ "-LR")))
+--       yield h (Right (Right (s' ++ "-LR")))
+--     userRL = toCoPipe \s h -> do
+--       s' <- yield h (Right (Right (s ++ "-RL")))
+--       yield h (Left (Right (s' ++ "-RL")))
+--     userRR = toCoPipe \s h -> do
+--       s' <- yield h (Left (Left (s ++ "-RR")))
+--       pure (s' ++ "-RR")
+--     (|+) = eitherCoPipe id
+--
+-- -- runPureEff echo == "S-LL-LR-RL-RR-LL-RL-LR-RR"
+-- @
+--
+-- == References
 --
 -- Coroutines are also known as generators in Javascript and Python.
 --
@@ -209,7 +294,7 @@ voidCoPipe = MkCoPipe absurd
 -- branching on the input type.
 eitherPipe :: Monad m =>
   (i -> Either i1 i2) ->   -- ^ Dispatch input
-  CoPipe i1 o m Void ->    -- ^ Left copipe
+  CoPipe i1 o m a ->       -- ^ Left copipe
   Pipe i2 o m a ->         -- ^ Right pipe
   Pipe i o m a
 eitherPipe split t0 (MkPipe p) = MkPipe $ p <&> \e -> case e of
@@ -219,13 +304,15 @@ eitherPipe split t0 (MkPipe p) = MkPipe $ p <&> \e -> case e of
 -- | Sum two copipes with the same output type, branching on the input type.
 eitherCoPipe :: Functor m =>
   (i -> Either i1 i2) ->   -- ^ Dispatch input
-  CoPipe i1 o m Void ->    -- ^ Left copipe
+  CoPipe i1 o m a ->       -- ^ Left copipe
   CoPipe i2 o m a ->       -- ^ Right copipe
   CoPipe i o m a
 eitherCoPipe split = loop
   where
     loop t1 t2 = MkCoPipe (MkPipe . transduce_ t1 t2 . split)
-    transduce_ t1 t2 (Left i1) = next t1 i1 <&> \(o, t1') -> Yielding o (loop t1' t2)
+    transduce_ (MkCoPipe t1) t2 (Left i1) = stepPipe (t1 i1) <&> \e -> case e of
+      Done a -> Done a
+      Yielding o t1' -> Yielding o (loop t1' t2)
     transduce_ t1 (MkCoPipe t2) (Right i2) = stepPipe (t2 i2) <&> \e -> case e of
       Done a -> Done a
       Yielding o t2' -> Yielding  o (loop t1 t2')

@@ -8,9 +8,9 @@
   TypeOperators #-}
 module Main (main) where
 
-import Control.Monad (join)
+import Control.Monad (forever, join)
 import Data.Functor (void)
-import Data.Void (Void, absurd)
+import Data.Void (absurd)
 import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
 import Bluefin.Eff (Eff, runPureEff, runEff, bracket, type (:&), type (:>))
@@ -143,6 +143,53 @@ coyield state exn o = do
 
 -- * Concurrency
 
+range1to4 :: z :> zz => Handler (Coroutine Int ()) z -> Eff zz ()
+range1to4 h = do
+  yield h 1
+  yield h 2
+  yield h 3
+  yield h 4
+
+filterEven :: z :> zz => Handler (State [Int]) z -> Eff zz ()
+filterEven h =
+  forCoroutine range1to4 \n ->
+    if n `mod` 2 == 0
+    then modify h (n :)
+    else pure ()
+
+filterEvenResult :: Eff zz [Int]
+filterEvenResult = execState [] filterEven
+
+pingpong :: Eff ss String
+pingpong = withCoroutine coThread mainThread
+  where
+    coThread z0 h = do
+      z1 <- yield h (z0 ++ "pong")
+      z2 <- yield h (z1 ++ "dong")
+      forever (yield h (z2 ++ "bong"))
+    mainThread h = do
+      s1 <- yield h "ping"
+      s2 <- yield h (s1 ++ "ding")
+      s3 <- yield h (s2 ++ "bing")
+      pure s3
+
+echo :: Eff ss String
+echo = loopCoPipe ((userLL |+ userLR) |+ (userRL |+ userRR)) (Left (Left "S"))
+  where
+    userLL = toCoPipe \s h -> do
+      s' <- yield h (Left (Right (s ++ "-LL")))
+      yield h (Right (Left (s' ++ "-LL")))
+    userLR = toCoPipe \s h -> do
+      s' <- yield h (Right (Left (s ++ "-LR")))
+      yield h (Right (Right (s' ++ "-LR")))
+    userRL = toCoPipe \s h -> do
+      s' <- yield h (Right (Right (s ++ "-RL")))
+      yield h (Left (Right (s' ++ "-RL")))
+    userRR = toCoPipe \s h -> do
+      s' <- yield h (Left (Left (s ++ "-RR")))
+      pure (s' ++ "-RR")
+    (|+) = eitherCoPipe id
+
 -- | Coroutine identifier
 newtype Cid = Cid Int deriving (Eq, Show)
 
@@ -171,8 +218,8 @@ hotpotato yell c potato0 cr = loop potato0 where
   loop _ | otherwise = throw yell c  -- if potato has cooled down, we won the potato.
 
 -- | Four coroutines play the hot potato game.
-hotpotatoes :: Cid
-hotpotatoes = runPureEff do
+hotpotatoes :: Eff ss Cid
+hotpotatoes = do
   e <- try \yell ->
     -- Wrap Cid into [0 .. 3]
     let wrapCid = mapCoPipe id (\(Cid n, potato) -> (Cid (n `mod` 4), potato)) id in
@@ -196,7 +243,7 @@ infixr 4 +|
 --
 -- The coroutines are numbered sequentially.
 (+|) ::
-  CoPipeSEff i o zz Void ->
+  CoPipeSEff i o zz a ->
   CoPipe (Cid, i) o (Eff zz) a ->
   CoPipe (Cid, i) o (Eff zz) a
 (+|) l r = eitherCoPipe split l' r
@@ -211,7 +258,10 @@ testCoroutine :: TestTree
 testCoroutine = testGroup "Coroutine"
   [ testCase "feedPipe-sum" $ runPureEff (feedPipe [1,2,3] (toPipe cumulSum)) @?= [0,1,3,6]
   , testCase "feedCoroutine-sum" $ runPureEff (feedCoroutine [1,2,3] cumulSum) @?= [0,1,3,6]
-  , testCase "hotpotato" $ hotpotatoes @?= Cid 1
+  , testCase "filterEven" $ runPureEff filterEvenResult @?= [4,2]
+  , testCase "pingpong" $ runPureEff pingpong @?= "pingpongdingdongbingbong"
+  , testCase "echo" $ runPureEff echo @?= "S-LL-LR-RL-RR-LL-RL-LR-RR"
+  , testCase "hotpotato" $ runPureEff hotpotatoes @?= Cid 1
   ]
 
 main :: IO ()
