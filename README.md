@@ -118,10 +118,10 @@ original state is restored upon backtracking (both branches return `1`):
 ```haskell
 nsExamplePure :: [Int]
 nsExamplePure = runPureEff $ NonDet.toList \choice ->
-  let state = 0                          -- initial state
+  let state = 0                  -- initial state that was passed to runState
   _ <- choose choice True False
-  let state' = state' + 1                -- modify' (+ 1)
-  pure state'                            -- (snd <$> runState) returns the final state
+  let state' = state + 1         -- modify (+ 1)
+  pure state'                    -- (snd <$> runState) returns the final state
 
 -- nsExamplePure == [1,1]
 ```
@@ -139,7 +139,7 @@ nsExampleA :: [Int]
 nsExampleA = runPureEff $ NonDet.toList \choice ->
   A.execState 0 \state -> do
     _ <- choose choice True False
-    A.modify' (+ 1) state
+    A.modify (+ 1) state
 
 -- nsExampleA == [1,1]
 ```
@@ -157,7 +157,7 @@ but makes the semantics of Bluefin less clear. For the sake of science,
 ### Quadratic behavior of non-tail recursion.
 
 For example, the following recursive counter will take time quadratic in `n`
-because every call of `modify'` traverses the call stack to find its handler
+because every call of `modify` traverses the call stack to find its handler
 and capture the continuation.
 
 ```haskell
@@ -165,7 +165,7 @@ leftRecCounter :: z :> zz => Handler (State Int) z -> Int -> Eff zz ()
 leftRecCounter _state 0 = pure ()
 leftRecCounter state n = do
   leftRecCounter state (n - 1)
-  modify' state (+ 1)
+  modify state (+ 1)
 ```
 
 ## Comparison
