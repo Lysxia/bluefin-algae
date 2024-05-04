@@ -1,5 +1,6 @@
 {-# LANGUAGE
   KindSignatures,
+  RankNTypes,
   ScopedTypeVariables,
   TypeOperators #-}
 -- | = Dynamic exceptions
@@ -21,6 +22,7 @@
 --   (unlike 'Bluefin.Eff.bracket' in "Bluefin.Eff").
 module Bluefin.Exception.Dynamic
   ( DynExn
+  , runDynExn
   , ioeToDynExn
   , throw
   , catch
@@ -38,6 +40,10 @@ import Bluefin.IO (IOE)
 
 -- | Capability to catch and throw dynamic exceptions.
 data DynExn (ex :: Effects) = UnsafeDynExn
+
+-- | Run a computation with only access to dynamic exceptions.
+runDynExn :: (forall ex. DynExn ex -> Eff ex a) -> a
+runDynExn f = B.runPureEff (f UnsafeDynExn)
 
 -- | Refine an 'IOE' capability to a 'DynExn'.
 ioeToDynExn :: IOE io -> DynExn io

@@ -13,7 +13,7 @@ import Data.Functor (void)
 import Data.Void (absurd)
 import Test.Tasty (defaultMain, testGroup, TestTree)
 import Test.Tasty.HUnit
-import Bluefin.Eff (Eff, runPureEff, runEff, bracket, type (:&), type (:>))
+import Bluefin.Eff (Eff, runPureEff, bracket, type (:&), type (:>))
 import qualified Bluefin.State as B
 import Bluefin.Algae
 import Bluefin.Algae.State
@@ -70,9 +70,9 @@ exceptionLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (try \exn ->
     onException (throw exn ()) (void (incr state)))
 
-exceptionDynLitmus :: IO Int
-exceptionDynLitmus = runEff \io -> snd <$> runState 0 \state ->
-  void (EC.try (ED.ioeToDynExn io) \exn ->
+exceptionDynLitmus :: Int
+exceptionDynLitmus = ED.runDynExn \ex -> snd <$> runState 0 \state ->
+  void (EC.try ex \exn ->
     onException (EC.throw exn ()) (void (incr state)))
 
 exceptionNoCancelLitmus :: Int
@@ -88,7 +88,7 @@ exnLitmus = runPureEff $ snd <$> runState 0 \state ->
 testException :: TestTree
 testException = testGroup "Exception"
   [ testCase "litmus-exception" $ exceptionLitmus @?= 1
-  , testCase "litmus-exception-dyn" $ exceptionDynLitmus >>= \n -> n @?= 1
+  , testCase "litmus-exception-dyn" $ exceptionDynLitmus @?= 1
   , testCase "litmus-exception-no-cancel" $ exceptionNoCancelLitmus @?= 0
   , testCase "litmus-exn" $ exnLitmus @?= 1
   ]
