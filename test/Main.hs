@@ -29,7 +29,7 @@ import qualified Bluefin.Exception.Dynamic as ED
 -- Simple sanity test
 
 incr :: z :> zz => Handler (State Int) z -> Eff zz ()
-incr state = modify' state (+ 1)
+incr state = modify state (+ 1)
 
 -- Distinguishing Bluefin.Algae.State (pure state) from Bluefin.State (IORef)
 

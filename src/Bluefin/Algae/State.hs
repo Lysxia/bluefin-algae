@@ -16,9 +16,9 @@ module Bluefin.Algae.State
     State(..)
   , get
   , put
-  , put'
+  , putL
   , modify
-  , modify'
+  , modifyL
 
     -- * Handlers
   , runState
@@ -42,20 +42,24 @@ get :: z :> zz => Handler (State s) z -> Eff zz s
 get h = call h Get
 
 -- | Put a new state. Call the 'Put' operation.
+--
+-- This function is strict.
 put :: z :> zz => Handler (State s) z -> s -> Eff zz ()
-put h s = call h (Put s)
+put h !s = call h (Put s)
 
--- | Strict variant of 'put'.
-put' :: z :> zz => Handler (State s) z -> s -> Eff zz ()
-put' h !s = call h (Put s)
+-- | Lazy variant of 'put'.
+putL :: z :> zz => Handler (State s) z -> s -> Eff zz ()
+putL h s = call h (Put s)
 
 -- | Modify the state.
+--
+-- This function is strict in the modified state.
 modify :: z :> zz => Handler (State s) z -> (s -> s) -> Eff zz ()
 modify h f = get h >>= put h . f
 
--- | Strict variant of 'modify'.
-modify' :: z :> zz => Handler (State s) z -> (s -> s) -> Eff zz ()
-modify' h f = get h >>= put' h . f
+-- | Lazy variant of 'modify'.
+modifyL :: z :> zz => Handler (State s) z -> (s -> s) -> Eff zz ()
+modifyL h f = get h >>= putL h . f
 
 -- | Run a stateful computation from the given starting state.
 runState ::

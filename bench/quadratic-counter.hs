@@ -18,7 +18,7 @@ leftRecCounter :: z :> zz => Handler (State Int) z -> Int -> Eff zz ()
 leftRecCounter _state 0 = pure ()
 leftRecCounter state n = do
   leftRecCounter state (n - 1)
-  modify' state (+ 1)
+  modify state (+ 1)
 
 -- Benchmarking harness
 
