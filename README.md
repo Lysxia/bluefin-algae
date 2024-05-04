@@ -21,7 +21,7 @@ Algebraic effects can implement cooperative multithreading.
 In the following example, two threads yield a string back and forth,
 appending a suffix every time.
 
-```
+```haskell
 pingpong :: Eff ss String
 pingpong = withCoroutine coThread mainThread
   where
@@ -47,7 +47,7 @@ power of delimited continuations.
 With the power to interrupt and resume operations freely, we can
 do backtracking search in the `Eff` monad.
 
-```
+```haskell
 pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
 pythagoras choice = do
   x <- pick choice [1 .. 10]
