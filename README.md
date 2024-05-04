@@ -1,5 +1,5 @@
-Algebraic effects and named handlers in Bluefin
-===============================================
+Named algebraic effect handlers in Bluefin
+==========================================
 
 Algebraic effects are a minimalistic basis for **user-defined effects**.
 Using algebraic effects, we can reimplement, from scratch, effects that
@@ -91,3 +91,14 @@ leftRecCounter state n = do
   leftRecCounter state (n - 1)
   modify' state (+ 1)
 ```
+
+## More reading
+
+Named effect handlers are described in the literature in:
+
+- [Binders by day, labels by night](https://maciejpirog.github.io/papers/binders-labels.pdf)
+    by Dariusz Biernacki et al.
+- [First-class names for effect handlers](https://www.microsoft.com/en-us/research/uploads/prod/2021/05/namedh-tr.pdf)
+    by Ningning Xie et al. (impemented in the [Koka](https://koka-lang.github.io/koka/doc/index.html) language)
+- [Effects, capabilities, and Boxes](https://dl.acm.org/doi/pdf/10.1145/3527320)
+    by Jonathan Brachtäuser et al.
