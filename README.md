@@ -17,12 +17,12 @@ characteristics which may be problematic for practical applications.
 An algebraic effect library is basically a free monad library with support for
 extensible effects.
 
-Effect handlers---the core primitive of algebraic effects---are conceptually
+Effect handlers—the core primitive of algebraic effects—are conceptually
 folds of trees, aka.
 [`iter` in free](https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free.html)
 or [`cata` in recursion-schemes](https://hackage.haskell.org/package/recursion-schemes-5.2.2.5/docs/Data-Functor-Foldable.html#v:cata).
 
-Effect systems---such as Bluefin---enable combinations of effects within a
+Effect systems—such as Bluefin—enable combinations of effects within a
 single parameterized monad. Bluefin Algae seamlessly integrates with Bluefin's
 infrastructure in order to compose algebraic effects.
 
