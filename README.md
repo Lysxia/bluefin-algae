@@ -97,7 +97,7 @@ Because `Bluefin.State` is backed by `IORef`, the mutation persists
 through backtracking (the second branch returns `2` in the first example).
 
 In comparison, the state effect defined using algebraic effects
-(`Bluefin.Algae.State`) has the pure semantics.
+(`Bluefin.Algae.State`) has the state-passing semantics.
 
 ```haskell
 import qualified Bluefin.Algae.State as A
@@ -122,6 +122,10 @@ but makes the semantics of Bluefin less clear. For the sake of science,
 ### Comparison with Bluefin effects
 
 The Bluefin effect system provides a well-scoped [handle pattern][handle].
+Unlike algebraic effects with which other computational effects can be
+user-defined, Bluefin provides a collection of built-in effects
+(state, exceptions, coroutines).
+
 Without delimited continuations, only tail-resumptive algebraic effect handlers
 are expressible in Bluefin. Those are effect handlers restricted to the
 following form, which is equivalent to type `forall r. f r -> Eff ss r`.
@@ -130,10 +134,6 @@ following form, which is equivalent to type `forall r. f r -> Eff ss r`.
 (\e k -> _ >>= k)
   :: forall r. f r -> (r -> Eff ss a) -> Eff ss a
 ```
-
-Unlike algebraic effects with which other computational effects can be
-user-defined, Bluefin provides a collection of built-in effects
-(state, exceptions, coroutines).
 
 [handle]: https://jaspervdj.be/posts/2018-03-08-handle-pattern.html
 
