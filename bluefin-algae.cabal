@@ -56,7 +56,7 @@ test-suite main-test
         bluefin,
         bluefin-algae
 
-test-suite quadratic-counter
+benchmark quadratic-counter
     import:           warnings
     default-language: Haskell2010
     type:             exitcode-stdio-1.0
