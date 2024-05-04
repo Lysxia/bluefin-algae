@@ -111,6 +111,13 @@ toStream :: z :> zz =>
   Handler (Coroutine a ()) z -> Eff zz ()
 toStream f h = NonDet.forAllChoices f (yield h)
 
+permuts :: z :> zz => Handler NonDet.Choice z -> [a] -> Eff zz [a]
+permuts _ [] = pure []
+permuts choice xs = do
+  (x, ys) <- NonDet.removeFrom choice xs
+  zs <- permuts choice ys
+  pure (x : zs)
+
 pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
 pythagoras choice = do
   x <- NonDet.pick choice [1 .. 10]
@@ -124,7 +131,10 @@ testNonDet :: TestTree
 testNonDet = testGroup "NonDet"
   [ testCase "coin-flip" $ coinFlipList @?= [True, False]
   , testCase "via-stream" $ runPureEff (feedCoroutine [(), ()] (toStream coinFlip)) @?= [True, False]
-  , testCase "pythagoras" $ runPureEff (NonDet.toList pythagoras) @?= [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
+  , testCase "permutations" $ runPureEff (NonDet.toList (flip permuts [1,2,3::Int]))
+      @?= [[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]
+  , testCase "pythagoras" $ runPureEff (NonDet.toList pythagoras)
+      @?= [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
   ]
 
 -- * Streaming
