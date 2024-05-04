@@ -48,8 +48,9 @@ power of delimited continuations.
 
 The scoped exceptions from `Bluefin.Exception` are not completely scoped because
 they can be observed by `bracket`. That is probably the right behavior in practice,
-but for the sake of science, `Bluefin.Algae.Error` provides truly scoped exceptions,
-and implements "`bracket`-observable" exceptions on top.
+but makes the semantics of Bluefin less clear. For the sake of science,
+`Bluefin.Algae.Exception` provides truly scoped exceptions, and implements
+"`bracket`-observable" scoped exceptions on top.
 
 ### Comparison with Bluefin effects
 
