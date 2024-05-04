@@ -31,7 +31,7 @@ import Bluefin.Eff (Eff, type (:&), type (:>))
 import Bluefin.Algae
 
 -- | The state effect.
-data State (s :: Type) (r :: Type) where
+data State (s :: Type) :: AEffect where
   -- | Get the current state.
   Get :: State s s
   -- | Put a new state.

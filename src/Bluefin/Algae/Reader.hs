@@ -22,7 +22,7 @@ import Bluefin.Algae
 import Bluefin.Eff (Eff, type (:>), type (:&))
 
 -- | The reader effect.
-data Reader (a :: Type) (r :: Type) where
+data Reader (a :: Type) :: AEffect where
   -- | Ask for a value.
   Ask :: Reader a a
 

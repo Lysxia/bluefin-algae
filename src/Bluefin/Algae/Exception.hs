@@ -38,7 +38,7 @@ import Bluefin.Eff (Eff, type (:&), type (:>))
 import Bluefin.Algae
 
 -- | Exception interface.
-data Exception (e :: Type) (r :: Type) where
+data Exception (e :: Type) :: AEffect where
   -- | Throw an exception.
   Throw :: e -> Exception e r
 

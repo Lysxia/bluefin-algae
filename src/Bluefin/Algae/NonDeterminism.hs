@@ -25,13 +25,12 @@ module Bluefin.Algae.NonDeterminism
   ) where
 
 import Control.Monad ((>=>))
-import Data.Kind (Type)
 import Bluefin.Internal (insertFirst)
 import Bluefin.Eff (Eff, type (:&), type (:>))
 import Bluefin.Algae
 
 -- | Choice effect.
-data Choice (a :: Type) where
+data Choice :: AEffect where
   -- | Choose one of two alternatives.
   Choose :: a -> a -> Choice a
   -- | No choice.
