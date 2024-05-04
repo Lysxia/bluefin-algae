@@ -110,7 +110,12 @@ type Handler :: AEffect -> Effects -> Type
 data Handler f s where
   MkHandler :: !(PromptTag ss a s) -> HandlerBody' f ss a -> Handler f s
 
--- | Effectful computation with a scoped 'Handler'.
+-- | Effectful computation with in scope @ss@ and final result @a@,
+-- extended with a scoped algebraic effect @f@.
+--
+-- This type guarantees that the handler of @f@ cannot escape its scope:
+-- the 'Eff' computation cannot smuggle it out. All of the uses of the handle
+-- will happen in the span of the 'ScopedEff' computation.
 type ScopedEff f ss a = forall s. Handler f s -> Eff (s :& ss) a
 
 -- | Handle operations of @f@.
@@ -133,7 +138,7 @@ handle' ::
   Eff ss a
 handle' h act = reset (\p -> act (MkHandler p h))
 
--- | Call an operation of @f@.
+-- | Call an operation of algebraic effect @f@ with a handler.
 call :: s :> ss => Handler f s -> f a -> Eff ss a
 call (MkHandler p h) op = shift0 p (\k -> h op k)
 
