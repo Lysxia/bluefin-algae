@@ -44,6 +44,23 @@ power of delimited continuations.
 
 ### Nondeterminism
 
+With the power to interrupt and resume operations freely, we can
+do backtracking search in the `Eff` monad.
+
+```
+pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
+pythagoras choice = do
+  x <- pick choice [1 .. 10]
+  y <- pick choice [1 .. 10]
+  z <- pick choice [1 .. 10]
+  assume choice (x .^ 2 + y .^ 2 == z .^ 2)
+  pure (x, y, z)
+
+  where (.^) = (Prelude.^) :: Int -> Int -> Int
+
+-- runPureEff (toList pythagoras) == [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
+```
+
 ### Truly scoped exceptions.
 
 The scoped exceptions from `Bluefin.Exception` are not completely scoped because

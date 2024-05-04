@@ -18,13 +18,16 @@ module Bluefin.Algae.NonDeterminism
     Choice(..)
   , choose
   , nil
+  , assume
+  , pick
+  , removeFrom
     -- * Handlers
   , forAllChoices
   , toList
   , foldChoice
   ) where
 
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), join)
 import Bluefin.Internal (insertFirst)
 import Bluefin.Eff (Eff, type (:&), type (:>))
 import Bluefin.Algae
@@ -43,6 +46,24 @@ choose h x y = call h (Choose x y)
 -- | No choice. Call the 'Nil' operation.
 nil :: z :> zz => Handler Choice z -> Eff zz a
 nil h = call h Nil
+
+-- | Do nothing if @True@. Discard (call 'nil') if @False@.
+assume :: z :> zz => Handler Choice z -> Bool -> Eff zz ()
+assume _ True = pure ()
+assume h False = nil h
+
+-- | Pick an element in a list.
+pick :: z :> zz => Handler Choice z -> [a] -> Eff zz a
+pick h [] = nil h
+pick h (x : xs) = join $ choose h (pure x) (pick h xs)
+
+-- | Remove an element from a list, returning the resulting list as well.
+-- The order of elements is preserved.
+removeFrom :: z :> zz => Handler Choice z -> [a] -> Eff zz (a, [a])
+removeFrom h = loop []
+  where
+    loop _ [] = nil h
+    loop ys (x : xs) = join $ choose h (pure (x, reverse ys ++ xs)) (loop (x : ys) xs)
 
 -- | Apply a function to every result of the nondeterministic computation.
 forAllChoices :: forall a zz.
