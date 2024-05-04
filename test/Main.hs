@@ -19,7 +19,7 @@ import Bluefin.Algae
 import Bluefin.Algae.State
 import Bluefin.Algae.Exception
 import qualified Bluefin.Algae.Exception.DynExn as EC
-import qualified Bluefin.Algae.NonDeterminism as NonDet
+import Bluefin.Algae.NonDeterminism as NonDet
 import Bluefin.Algae.Coroutine
 import qualified Bluefin.Exception as E
 import qualified Bluefin.Exception.Dynamic as ED
@@ -28,33 +28,26 @@ import qualified Bluefin.Exception.Dynamic as ED
 
 -- Simple sanity test
 
-incr :: z :> zz => Handler (State Int) z -> Eff zz Int
-incr state = do
-  n <- get state
-  put state (n + 1)
-  pure n
+incr :: z :> zz => Handler (State Int) z -> Eff zz ()
+incr state = modify' state (+ 1)
 
 -- Distinguishing Bluefin.Algae.State (pure state) from Bluefin.State (IORef)
 
 algaeStateLitmus :: [Int]
 algaeStateLitmus = runPureEff $ NonDet.toList \choice ->
   execState 0 \state -> do
-    _ <- NonDet.choose choice True False
+    _ <- choose choice True False
     incr state
 
 bluefinStateLitmus :: [Int]
 bluefinStateLitmus = runPureEff $ NonDet.toList \choice ->
   snd <$> B.runState 0 \state -> do
-    _ <- NonDet.choose choice True False
-    incr' state
-  where
-    incr' state = do
-      n <- B.get state
-      B.put state (n + 1)
+    _ <- choose choice True False
+    B.modify state (+ 1)
 
 testState :: TestTree
 testState = testGroup "State"
-  [ testCase "simple" $ runPureEff (runState 0 incr) @?= (0, 1)
+  [ testCase "simple" $ runPureEff (runState 0 incr) @?= ((), 1)
   , testCase "litmus-0" $ algaeStateLitmus @?= [1,1]
   , testCase "litmus-1" $ bluefinStateLitmus @?= [1,2]
   ]
@@ -67,22 +60,22 @@ onException run post = bracket (pure ()) (\_ -> post) (\_ -> run)
 exceptionLitmus :: Int
 exceptionLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (try \exn ->
-    onException (throw exn ()) (void (incr state)))
+    onException (throw exn ()) (incr state))
 
 exceptionDynLitmus :: Int
 exceptionDynLitmus = ED.runDynExn \ex -> snd <$> runState 0 \state ->
   void (EC.try ex \exn ->
-    onException (EC.throw exn ()) (void (incr state)))
+    onException (EC.throw exn ()) (incr state))
 
 exceptionNoCancelLitmus :: Int
 exceptionNoCancelLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (try' \exn ->
-    onException (throw exn ()) (void (incr state)))
+    onException (throw exn ()) (incr state))
 
 exnLitmus :: Int
 exnLitmus = runPureEff $ snd <$> runState 0 \state ->
   void (E.try \exn ->
-    onException (E.throw exn ()) (void (incr state)))
+    onException (E.throw exn ()) (incr state))
 
 testException :: TestTree
 testException = testGroup "Exception"
@@ -94,11 +87,11 @@ testException = testGroup "Exception"
 
 -- * Nondeterminism
 
-coinFlip :: z :> zz => Handler NonDet.Choice z -> Eff zz Bool
+coinFlip :: z :> zz => Handler Choice z -> Eff zz Bool
 coinFlip choice =
-  join $ NonDet.choose choice -- flip coin
-    (NonDet.nil choice)     -- coin falls in gutter
-    (join $ NonDet.choose choice
+  join $ choose choice -- flip coin
+    (nil choice)     -- coin falls in gutter
+    (join $ choose choice
       (pure True)    -- heads
       (pure False))  -- tails
 
@@ -106,23 +99,23 @@ coinFlipList :: [Bool]
 coinFlipList = runPureEff (NonDet.toList coinFlip)
 
 toStream :: z :> zz =>
-  (forall z0. Handler NonDet.Choice z0 -> Eff (z0 :& zz) a) ->
+  (forall z0. Handler Choice z0 -> Eff (z0 :& zz) a) ->
   Handler (Coroutine a ()) z -> Eff zz ()
-toStream f h = NonDet.forAllChoices f (yield h)
+toStream f h = forAllChoices f (yield h)
 
-permuts :: z :> zz => Handler NonDet.Choice z -> [a] -> Eff zz [a]
+permuts :: z :> zz => Handler Choice z -> [a] -> Eff zz [a]
 permuts _ [] = pure []
 permuts choice xs = do
-  (x, ys) <- NonDet.removeFrom choice xs
+  (x, ys) <- removeFrom choice xs
   zs <- permuts choice ys
   pure (x : zs)
 
-pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
+pythagoras :: z :> zz => Handler Choice z -> Eff zz (Int, Int, Int)
 pythagoras choice = do
-  x <- NonDet.pick choice [1 .. 10]
-  y <- NonDet.pick choice [1 .. 10]
-  z <- NonDet.pick choice [1 .. 10]
-  NonDet.assume choice (x .^ 2 + y .^ 2 == z .^ 2)
+  x <- pick choice [1 .. 10]
+  y <- pick choice [1 .. 10]
+  z <- pick choice [1 .. 10]
+  assume choice (x .^ 2 + y .^ 2 == z .^ 2)
   pure (x, y, z)
   where (.^) = (Prelude.^) :: Int -> Int -> Int
 
