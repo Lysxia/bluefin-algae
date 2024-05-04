@@ -1,6 +1,6 @@
 cabal-version:      3.4
 name:               bluefin-algae
-version:            0.1.0.0
+version:            0.1.0.1
 synopsis:
   Algebraic effects and named handlers in Bluefin.
 description:
@@ -12,7 +12,7 @@ maintainer:         lysxia@gmail.com
 copyright:          Li-yao Xia 2024
 category:           Control
 build-type:         Simple
-extra-doc-files:    CHANGELOG.md
+extra-doc-files:    CHANGELOG.md README.md
 tested-with:
   GHC == 9.6.4
   GHC == 9.8.2
