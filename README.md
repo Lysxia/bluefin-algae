@@ -66,7 +66,7 @@ implementation of the built-in state effect in `Bluefin.State`.
 Here is a program using nondeterminism and state. There are two branches
 (`choose`), both modify the state (`incr`).
 
-```
+```haskell
 import qualified Bluefin.State as B
 
 nsExampleB :: [Int]
@@ -82,7 +82,7 @@ The state handler (`runState`) is under the nondeterminism handler
 (`toList`), which suggests a state-passing interpetation, where the
 original state is restored upon backtracking (both branches return `1`):
 
-```
+```haskell
 nsExamplePure :: [Int]
 nsExamplePure = runPureEff $ NonDet.toList \choice ->
   let state = 0                          -- initial state
