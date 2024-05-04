@@ -71,10 +71,21 @@ but makes the semantics of Bluefin less clear. For the sake of science,
 
 ### Comparison with Bluefin effects
 
-Bluefin is simply a well-scoped framework for the "handle pattern".
-Without delimited continuations, only tail-resumptive handlers are expressible.
-Bluefin still supports exceptions and state as built-in effects (instead of
-them being definable via a common primitive) so much expressiveness remains.
+The Bluefin effect system provides a well-scoped [handle pattern][handle].
+Without delimited continuations, only tail-resumptive algebraic effect handlers
+are expressible in Bluefin. Those are effect handlers restricted to the
+following form, which is equivalent to type `forall r. f r -> Eff ss r`.
+
+```haskell
+(\e k -> _ >>= k)
+  :: forall r. f r -> (r -> Eff ss a) -> Eff ss a
+```
+
+Unlike algebraic effects with which other computational effects can be
+user-defined, Bluefin provides a collection of built-in effects
+(state, exceptions, coroutines).
+
+[handle]: https://jaspervdj.be/posts/2018-03-08-handle-pattern.html
 
 ## Lowlights
 
