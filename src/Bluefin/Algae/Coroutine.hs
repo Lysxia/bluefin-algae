@@ -110,13 +110,20 @@
 -- - <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*#description Generators in Javascript>
 -- - <https://docs.python.org/3/reference/expressions.html#yieldexpr Generators in Python>
 module Bluefin.Algae.Coroutine
-  ( -- * Operations
+  ( -- * Coroutines
+
+    -- ** Operations
     Coroutine(..)
   , yield
 
-    -- * Handlers
+    -- ** Handlers
   , withCoroutine
   , forCoroutine
+
+    -- * Functions
+  , (:->)
+  , apply
+  , withFunction
 
     -- * Pipes
     -- ** Definition
@@ -179,6 +186,7 @@ module Bluefin.Algae.Coroutine
 import Data.Coerce (coerce)
 import Data.Function (fix)
 import Data.Functor ((<&>))
+import Data.Kind (Type)
 import Data.Void (Void, absurd)
 import Bluefin.Eff
 import Bluefin.Algae
@@ -186,13 +194,32 @@ import Bluefin.Algae
 -- * Coroutines
 
 -- | Coroutine effect with outputs @o@ and inputs @i@.
-data Coroutine o i a where
+data Coroutine o i :: AEffect where
   -- | Yield an output and wait for an input.
   Yield :: o -> Coroutine o i i
 
 -- | Call the 'Yield' operation.
 yield :: z :> zz => Handler (Coroutine o i) z -> o -> Eff zz i
 yield h o = call h (Yield o)
+
+-- | This type synonym rebrands 'Coroutine' into a generic "function" effect,
+-- since without the concurrency connotations, the 'Yield' operation looks
+-- like a simple function call.
+type (:->) :: Type -> Type -> AEffect
+type (:->) = Coroutine
+
+-- | Synonym for 'yield'.
+apply :: z :> zz => Handler (a :-> b) z -> a -> Eff zz b
+apply = yield
+
+-- | Interpret @(':->')@ with a function.
+withFunction :: forall a b r zz.
+  (a -> Eff zz b) ->
+  ScopedEff (a :-> b) zz r ->
+  Eff zz r
+withFunction f g = forCoroutine g f
+-- This is morally @flip forCoroutine@ except that it wouldn't type check
+-- because 'forCoroutine' has a higher-rank type.
 
 -- * Pipes
 
