@@ -20,6 +20,8 @@ In the following example, two threads yield a string back and forth, appending
 a suffix every time.
 
 ```haskell
+import Bluefin.Algae.Coroutine
+
 pingpong :: Eff ss String
 pingpong = withCoroutine coThread mainThread
   where
@@ -46,7 +48,9 @@ With the ability to interrupt and resume operations freely, we can do
 backtracking search in the `Eff` monad.
 
 ```haskell
-pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
+import Bluefin.Algae.NonDeterminism as NonDet
+
+pythagoras :: z :> zz => Handler Choice z -> Eff zz (Int, Int, Int)
 pythagoras choice = do
   x <- pick choice [1 .. 10]
   y <- pick choice [1 .. 10]
@@ -56,7 +60,7 @@ pythagoras choice = do
 
   where (.^) = (Prelude.^) :: Int -> Int -> Int
 
--- runPureEff (toList pythagoras) == [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
+-- runPureEff (NonDet.toList pythagoras) == [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
 ```
 
 #### Backtracking and state
@@ -72,21 +76,21 @@ import qualified Bluefin.State as B
 nsExampleB :: [Int]
 nsExampleB = runPureEff $ NonDet.toList \choice ->
   snd <$> B.runState 0 \state -> do
-    _ <- NonDet.choose choice True False
-    B.modify' (+ 1) state
+    _ <- choose choice True False
+    B.modify (+ 1) state
 
 -- nsExampleB == [1,2]
 ```
 
 The state handler (`runState`) is under the nondeterminism handler
-(`toList`), which suggests a state-passing interpetation, where the
+(`NonDet.toList`), which suggests a state-passing interpetation, where the
 original state is restored upon backtracking (both branches return `1`):
 
 ```haskell
 nsExamplePure :: [Int]
 nsExamplePure = runPureEff $ NonDet.toList \choice ->
   let state = 0                          -- initial state
-  _ <- NonDet.choose choice True False
+  _ <- choose choice True False
   let state' = state' + 1                -- modify' (+ 1)
   pure state'                            -- (snd <$> runState) returns the final state
 
@@ -105,7 +109,7 @@ import qualified Bluefin.Algae.State as A
 nsExampleA :: [Int]
 nsExampleA = runPureEff $ NonDet.toList \choice ->
   A.execState 0 \state -> do
-    _ <- NonDet.choose choice True False
+    _ <- choose choice True False
     A.modify' (+ 1) state
 
 -- nsExampleA == [1,1]
