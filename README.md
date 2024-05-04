@@ -61,6 +61,58 @@ pythagoras choice = do
 -- runPureEff (toList pythagoras) == [(3,4,5),(4,3,5),(6,8,10),(8,6,10)]
 ```
 
+#### Backtracking and state
+
+Resuming continuations more than once exposes the impurity of the
+implementation of the built-in state effect in `Bluefin.State`.
+Here is a program using nondeterminism and state. There are two branches
+(`choose`), both modify the state (`incr`).
+
+```
+import qualified Bluefin.State as B
+
+nsExampleB :: [Int]
+nsExampleB = runPureEff $ NonDet.toList \choice ->
+  snd <$> B.runState 0 \state -> do
+    _ <- NonDet.choose choice True False
+    B.modify' (+ 1) state
+
+-- nsExampleB == [1,2]
+```
+
+The state handler (`runState`) is under the nondeterminism handler
+(`toList`), which suggests a state-passing interpetation, where the
+original state is restored upon backtracking (both branches return `1`):
+
+```
+nsExamplePure :: [Int]
+nsExamplePure = runPureEff $ NonDet.toList \choice ->
+  let state = 0                          -- initial state
+  _ <- NonDet.choose choice True False
+  let state' = state' + 1                -- modify' (+ 1)
+  pure state'                            -- (snd <$> runState) returns the final state
+
+-- nsExamplePure == [1,1]
+```
+
+Because `Bluefin.State` is backed by `IORef`, the mutation persists
+through backtracking (the second branch returns `2` in the first example).
+
+The state effect defined using algebraic effects (`Bluefin.Algae.State`)
+has the intended pure semantics.
+
+```haskell
+import qualified Bluefin.Algae.State as A
+
+nsExampleA :: [Int]
+nsExampleA = runPureEff $ NonDet.toList \choice ->
+  A.execState 0 \state -> do
+    _ <- NonDet.choose choice True False
+    A.modify' (+ 1) state
+
+-- nsExampleA == [1,1]
+```
+
 ### Truly scoped exceptions.
 
 The scoped exceptions from `Bluefin.Exception` are not completely scoped because
