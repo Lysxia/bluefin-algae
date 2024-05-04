@@ -225,8 +225,9 @@ withFunction f g = forCoroutine g f
 
 -- | Output-first coroutine.
 --
--- A 'Pipe' represents a coroutine as a tree: a 'Pipe' yields an output @o@ and
--- waits for an input @i@, or terminates with a result @a@.
+-- A 'Pipe' represents a coroutine as a state machine:
+-- a 'Pipe' yields an output @o@ and waits for an input @i@, or terminates with
+-- a result @a@.
 --
 -- @
 -- +--------------+                  +----------------+
@@ -242,11 +243,12 @@ newtype Pipe i o m a = MkPipe (m (PipeEvent i o m a))
 
 -- | Events of 'Pipe'.
 data PipeEvent i o m a
-  = Done a
-  | Yielding o (CoPipe i o m a)
+  = Done a                       -- ^ Final result @a@
+  | Yielding o (CoPipe i o m a)  -- ^ Output @o@ and continue as 'CoPipe'.
 
 -- | Input-first coroutine. 'Pipe' continuation.
-newtype CoPipe i o m a = MkCoPipe (i -> Pipe i o m a)
+newtype CoPipe i o m a
+  = MkCoPipe (i -> Pipe i o m a)  -- ^ Input @i@ and continue as 'Pipe'.
 
 -- | Unwrap 'Pipe'.
 stepPipe :: Pipe i o m a -> m (PipeEvent i o m a)
