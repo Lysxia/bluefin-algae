@@ -17,7 +17,7 @@ module Bluefin.Algae.NonDeterminism
   ( -- * Operations
     Choice(..)
   , choose
-  , empty
+  , nil
     -- * Handlers
   , forAllChoices
   , toList
@@ -33,15 +33,15 @@ data Choice (a :: Type) where
   -- | Choose one of two alternatives.
   Choose :: a -> a -> Choice a
   -- | No choice.
-  Empty :: Choice a
+  Nil :: Choice a
 
 -- | Choose one of two alternatives. Call the 'Choose' operation.
 choose :: z :> zz => Handler Choice z -> a -> a -> Eff zz a
 choose h x y = call h (Choose x y)
 
--- | No choice. Call the 'Empty' operation.
-empty :: z :> zz => Handler Choice z -> Eff zz a
-empty h = call h Empty
+-- | No choice. Call the 'Nil' operation.
+nil :: z :> zz => Handler Choice z -> Eff zz a
+nil h = call h Nil
 
 -- | Apply a function to every result of the nondeterministic computation.
 forAllChoices :: forall a zz.
@@ -66,8 +66,8 @@ handleChoice :: forall a r zz.
   (Eff zz r -> Eff zz r -> Eff zz r) ->
   (forall z. Handler Choice z -> Eff (z :& zz) a) ->
   Eff zz r
-handleChoice oneE emptyE appendE f = handle choiceHandler (oneE . f)
+handleChoice oneE nilE appendE f = handle choiceHandler (oneE . f)
   where
     choiceHandler :: HandlerBody Choice zz r
     choiceHandler (Choose x y) k = appendE (k x) (k y)
-    choiceHandler Empty _k = emptyE
+    choiceHandler Nil _k = nilE

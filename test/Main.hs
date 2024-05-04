@@ -98,7 +98,7 @@ testException = testGroup "Exception"
 coinFlip :: z :> zz => Handler NonDet.Choice z -> Eff zz Bool
 coinFlip choice =
   join $ NonDet.choose choice -- flip coin
-    (NonDet.empty choice)     -- coin falls in gutter
+    (NonDet.nil choice)     -- coin falls in gutter
     (join $ NonDet.choose choice
       (pure True)    -- heads
       (pure False))  -- tails
