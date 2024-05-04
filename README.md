@@ -12,6 +12,35 @@ This is an experimental project. There are surprising performance
 characteristics which may be problematic for practical applications.
 [Details down below.](#quadratic-behavior-of-non-tail-recursion)
 
+## Free monads in `IO`
+
+An algebraic effect library is basically a free monad library with support for
+extensible effects.
+
+Effect handlers---the core primitive of algebraic effects---are conceptually
+folds of trees, aka.
+[`iter` in free](https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free.html)
+or [`cata` in recursion-schemes](https://hackage.haskell.org/package/recursion-schemes-5.2.2.5/docs/Data-Functor-Foldable.html#v:cata).
+
+Effect systems---such as Bluefin---enable combinations of effects within a
+single parameterized monad. Bluefin Algae seamlessly integrates with Bluefin's
+infrastructure in order to compose algebraic effects.
+
+The main novelties in Bluefin Algae are:
+
+- computations use the same representation as `IO` (`State# s -> (# State# s, a #)`)
+  instead of recursive types or continuation-passing encodings.
+  This is possible thanks to the recently available primitives for delimited
+  continuations.
+
+- thanks to Bluefin, effects are statically scoped: performing an operation
+  requires a handle which identifies a specific handler.
+
+  This enables new forms of abstraction boundaries.
+  A function `Eff s a -> Eff s a` cannot handle the operations of its argument.
+  The argument must be explicitly parameterized by the handler to allow
+  handling by its caller: `(forall z. Handler f z -> Eff (z : s) a) -> Eff s a`.
+
 ## Highlights
 
 ### Concurrency
@@ -123,7 +152,25 @@ but makes the semantics of Bluefin less clear. For the sake of science,
 `Bluefin.Algae.Exception` provides truly scoped exceptions, and implements
 "`bracket`-observable" scoped exceptions on top.
 
-### Comparison with Bluefin effects
+## Lowlights
+
+### Quadratic behavior of non-tail recursion.
+
+For example, the following recursive counter will take time quadratic in `n`
+because every call of `modify'` traverses the call stack to find its handler
+and capture the continuation.
+
+```haskell
+leftRecCounter :: z :> zz => Handler (State Int) z -> Int -> Eff zz ()
+leftRecCounter _state 0 = pure ()
+leftRecCounter state n = do
+  leftRecCounter state (n - 1)
+  modify' state (+ 1)
+```
+
+## Comparison
+
+### Bluefin
 
 The Bluefin effect system provides a well-scoped [handle pattern][handle].
 Unlike algebraic effects with which other computational effects can be
@@ -140,22 +187,6 @@ following form, which is equivalent to type `forall r. f r -> Eff ss r`.
 ```
 
 [handle]: https://jaspervdj.be/posts/2018-03-08-handle-pattern.html
-
-## Lowlights
-
-### Quadratic behavior of non-tail recursion.
-
-For example, the following recursive counter will take time quadratic in `n`
-because every call of `modify'` traverses the call stack to find its handler
-and capture the continuation.
-
-```haskell
-leftRecCounter :: z :> zz => Handler (State Int) z -> Int -> Eff zz ()
-leftRecCounter _state 0 = pure ()
-leftRecCounter state n = do
-  leftRecCounter state (n - 1)
-  modify' state (+ 1)
-```
 
 ## More reading
 
