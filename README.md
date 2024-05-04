@@ -1,25 +1,23 @@
 Named algebraic effect handlers in Bluefin
 ==========================================
 
+This package leverages the delimited continuations primitives added in
+GHC 9.6 to implement algebraic effects in the Bluefin effect system.
+
 Algebraic effects are a minimalistic basis for **user-defined effects**.
 Using algebraic effects, we can reimplement, from scratch, effects that
 were built-in the Bluefin library, and more.
 
-This package leverages the delimited continuations primitives added in
-GHC 9.6 to implement algebraic effects in the Bluefin effect system.
-
-This is an experimental project. There is a surprising performance
-characteristic to be aware of for any practical applications.
+This is an experimental project. There are surprising performance
+characteristics which may be problematic for practical applications.
 [Details down below.](#quadratic-behavior-of-non-tail-recursion)
 
 ## Highlights
 
 ### Concurrency
 
-Algebraic effects can implement cooperative multithreading.
-
-In the following example, two threads yield a string back and forth,
-appending a suffix every time.
+In the following example, two threads yield a string back and forth, appending
+a suffix every time.
 
 ```haskell
 pingpong :: Eff ss String
@@ -38,14 +36,14 @@ pingpong = withCoroutine coThread mainThread
 -- runPureEff pingpong == "pingpongdingdongbingbong"
 ```
 
-Note that, under the hood, `coThread` and `mainThread` are two `IO` computations.
+Note that `coThread` and `mainThread` are just `IO` computations under the hood.
 And we can interleave their executions without native multithreading. This is the
 power of delimited continuations.
 
 ### Nondeterminism
 
-With the power to interrupt and resume operations freely, we can
-do backtracking search in the `Eff` monad.
+With the ability to interrupt and resume operations freely, we can do
+backtracking search in the `Eff` monad.
 
 ```haskell
 pythagoras :: z :> zz => Handler NonDet.Choice z -> Eff zz (Int, Int, Int)
@@ -98,8 +96,8 @@ nsExamplePure = runPureEff $ NonDet.toList \choice ->
 Because `Bluefin.State` is backed by `IORef`, the mutation persists
 through backtracking (the second branch returns `2` in the first example).
 
-The state effect defined using algebraic effects (`Bluefin.Algae.State`)
-has the intended pure semantics.
+In comparison, the state effect defined using algebraic effects
+(`Bluefin.Algae.State`) has the pure semantics.
 
 ```haskell
 import qualified Bluefin.Algae.State as A
