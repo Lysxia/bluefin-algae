@@ -21,8 +21,10 @@ module Bluefin.Algae.NonDeterminism
     -- * Handlers
   , forAllChoices
   , toList
+  , foldChoice
   ) where
 
+import Control.Monad ((>=>))
 import Data.Kind (Type)
 import Bluefin.Internal (insertFirst)
 import Bluefin.Eff (Eff, type (:&), type (:>))
@@ -48,25 +50,25 @@ forAllChoices :: forall a zz.
   (forall z. Handler Choice z -> Eff (z :& zz) a) ->
   (a -> Eff zz ()) ->
   Eff zz ()
-forAllChoices f h = handleChoice (>>= insertFirst . h) (pure ()) (>>) f
+forAllChoices f h = foldChoice h (pure ()) (>>) f
 
 -- | Collect the results of a nondeterministic computation in a list.
 toList :: forall a zz.
   (forall z. Handler Choice z -> Eff (z :& zz) a) ->
   Eff zz [a]
-toList f = unwrap (handleChoice (fmap (:)) (pure id) (liftA2 (.)) f)
+toList f = unwrap (foldChoice (pure . (:)) (pure id) (liftA2 (.)) f)
   where
     unwrap :: Eff zz ([a] -> [a]) -> Eff zz [a]
     unwrap = fmap ($ [])
 
 -- | Generic 'Choice' handler parameterized by a monoid.
-handleChoice :: forall a r zz.
-  (forall z. Eff (z :& zz) a -> Eff (z :& zz) r) ->
-  Eff zz r ->
-  (Eff zz r -> Eff zz r -> Eff zz r) ->
-  (forall z. Handler Choice z -> Eff (z :& zz) a) ->
+foldChoice :: forall a r zz.
+  (a -> Eff zz r) ->           -- ^ Injection
+  Eff zz r ->                            -- ^ Identity element
+  (Eff zz r -> Eff zz r -> Eff zz r) ->  -- ^ Binary operation
+  ScopedEff Choice zz a ->
   Eff zz r
-handleChoice oneE nilE appendE f = handle choiceHandler (oneE . f)
+foldChoice oneE nilE appendE f = handle choiceHandler (f >=> insertFirst . oneE)
   where
     choiceHandler :: HandlerBody Choice zz r
     choiceHandler (Choose x y) k = appendE (k x) (k y)
