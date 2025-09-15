@@ -1,6 +1,8 @@
 Named algebraic effect handlers in Bluefin
 ==========================================
 
+[![Hackage](https://img.shields.io/hackage/v/bluefin-algae.svg)](https://hackage.haskell.org/package/bluefin-algae)
+
 This package leverages the delimited continuations primitives added in
 GHC 9.6 to implement algebraic effects in the Bluefin effect system.
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE
+  DataKinds,
   KindSignatures,
   RankNTypes,
   ScopedTypeVariables,
