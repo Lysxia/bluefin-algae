@@ -1,5 +1,6 @@
 {-# LANGUAGE
   BangPatterns,
+  DataKinds,
   GADTs,
   RankNTypes,
   ScopedTypeVariables,

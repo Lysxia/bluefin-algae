@@ -1,5 +1,6 @@
 {-# LANGUAGE
   BangPatterns,
+  DataKinds,
   MagicHash,
   RankNTypes,
   ScopedTypeVariables,

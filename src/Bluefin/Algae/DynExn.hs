@@ -1,5 +1,6 @@
 {-# LANGUAGE
   BangPatterns,
+  DataKinds,
   DeriveAnyClass,
   GADTs,
   RankNTypes,
