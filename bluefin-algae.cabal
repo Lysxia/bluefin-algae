@@ -65,7 +65,6 @@ benchmark quadratic-counter
     main-is:          quadratic-counter.hs
     build-depends:
         base,
-        tasty,
         tasty-bench,
         bluefin,
         bluefin-algae
